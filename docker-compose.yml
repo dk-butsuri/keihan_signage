@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./volume:/app/data
+    environment:
+      - TZ=Asia/Tokyo
+    env_file:
+      - .env
+    restart: always

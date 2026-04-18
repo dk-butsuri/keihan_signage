@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>同志社香里 サイネージ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base:    #07101F;
+            --bg-surface: #0C1828;
+            --bg-raised:  #102035;
+            --bd-sub:     #172C44;
+            --bd-mid:     #1F3D5A;
+            --tx-pri:     #D8E8F8;
+            --tx-sec:     #5A7A96;
+            --tx-dim:     #253B52;
+            --green:      #00C876;
+            --red:        #FF3045;
+            --amber:      #FFB020;
+            --blue:       #4A9EFF;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: var(--bg-base);
+            color: var(--tx-pri);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5vh 1.5vw;
+            gap: 1.5vh;
+        }
+
+        .font-syne  { font-family: 'Syne', sans-serif; }
+        .font-jb    { font-family: 'JetBrains Mono', monospace; }
+
+        .panel {
+            background: var(--bg-surface);
+            border: 1px solid var(--bd-sub);
+            border-radius: 3px;
+        }
+
+        /* Minimal 2px scrollbar */
+        .scr::-webkit-scrollbar       { width: 2px; }
+        .scr::-webkit-scrollbar-track { background: transparent; }
+        .scr::-webkit-scrollbar-thumb { background: var(--bd-mid); border-radius: 2px; }
+
+        /* Section label chip */
+        .chip {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: 0.72vw;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            padding: 0.25vh 0.6vw;
+            border-radius: 2px;
+        }
+
+        /* Train row hover */
+        #trains-up-body tr:hover,
+        #trains-down-body tr:hover { background: var(--bg-raised) !important; }
+
+        /* Marquee */
+        .marquee {
+            position: absolute;
+            white-space: nowrap;
+            animation: mq linear infinite;
+        }
+        @keyframes mq {
+            0%   { left: 100%; transform: translateX(0); }
+            100% { left: 0;    transform: translateX(-100%); }
+        }
+
+        @keyframes pulse-dim {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.35; }
+        }
+        .pulse { animation: pulse-dim 2s ease-in-out infinite; }
+
+        /* Writing mode for footer label */
+        .writing-v { writing-mode: vertical-rl; }
+    </style>
+</head>
+
+<body>
+
+    <!-- ─── Header ─── -->
+    <header class="panel" style="height:10vh; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 2vw;">
+        <div>
+            <div class="font-syne" style="font-size:0.65vw; font-weight:700; letter-spacing:0.35em; text-transform:uppercase; color:var(--tx-sec); margin-bottom:0.5vh;">
+                同志社香里 ／ Transit Information
+            </div>
+            <div class="font-syne" style="font-size:2.2vw; font-weight:800; color:var(--tx-pri); letter-spacing:-0.02em; line-height:1;">
+                運行情報パネル
+            </div>
+        </div>
+        <div style="display:flex; align-items:flex-end; gap:1.2vw;">
+            <div id="clock-date" class="font-jb" style="font-size:1.1vw; color:var(--tx-sec); margin-bottom:0.4vh; letter-spacing:0.05em;">--/--</div>
+            <div id="clock-time" class="font-jb" style="font-size:4.2vw; font-weight:700; color:var(--tx-pri); letter-spacing:-0.04em; line-height:1; font-variant-numeric:tabular-nums;">00:00</div>
+        </div>
+    </header>
+
+    <!-- ─── Main ─── -->
+    <main style="flex:1; display:flex; gap:1.5vw; overflow:hidden; min-height:0;">
+
+        <!-- Trains (2/3) -->
+        <section id="train-section" class="panel" style="width:66.666%; display:flex; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out;">
+
+            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
+                <span class="chip" style="background:rgba(74,158,255,0.12); color:var(--blue); border:1px solid rgba(74,158,255,0.3);">TRAIN</span>
+                <span style="font-size:1.3vw; font-weight:700;">京阪電車 香里園駅</span>
+            </div>
+
+            <div style="flex:1; display:flex; min-height:0;">
+
+                <!-- Kyoto -->
+                <div style="width:50%; display:flex; flex-direction:column; border-right:1px solid var(--bd-sub);">
+                    <div style="flex-shrink:0; text-align:center; padding:0.6vh 0; border-bottom:1px solid var(--bd-sub); background:rgba(74,158,255,0.05);">
+                        <span style="font-size:1.1vw; font-weight:700;">京都方面</span>
+                        <span style="font-size:0.85vw; color:var(--tx-sec); margin-left:0.5vw;">三条・出町柳</span>
+                    </div>
+                    <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+                        <table style="width:100%; table-layout:fixed; flex-shrink:0;">
+                            <thead>
+                                <tr style="background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
+                                    <th class="chip" style="width:25%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">種別</th>
+                                    <th class="chip" style="width:28%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">時刻</th>
+                                    <th class="chip" style="width:47%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">行先・状況</th>
+                                </tr>
+                            </thead>
+                        </table>
+                        <div style="position:relative; flex:1; overflow:hidden; display:flex; flex-direction:column;">
+                            <div id="trains-up-scroll-container" class="scr" style="overflow-y:auto; flex:1; scroll-behavior:smooth;">
+                                <table style="width:100%; table-layout:fixed;">
+                                    <tbody id="trains-up-body"></tbody>
+                                </table>
+                            </div>
+                            <div style="pointer-events:none; position:absolute; bottom:0; left:0; right:0; height:5vh; background:linear-gradient(to bottom, transparent, var(--bg-surface));"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Osaka -->
+                <div style="width:50%; display:flex; flex-direction:column;">
+                    <div style="flex-shrink:0; text-align:center; padding:0.6vh 0; border-bottom:1px solid var(--bd-sub); background:rgba(74,158,255,0.05);">
+                        <span style="font-size:1.1vw; font-weight:700;">大阪方面</span>
+                        <span style="font-size:0.85vw; color:var(--tx-sec); margin-left:0.5vw;">淀屋橋・中之島</span>
+                    </div>
+                    <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+                        <table style="width:100%; table-layout:fixed; flex-shrink:0;">
+                            <thead>
+                                <tr style="background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
+                                    <th class="chip" style="width:25%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">種別</th>
+                                    <th class="chip" style="width:28%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">時刻</th>
+                                    <th class="chip" style="width:47%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">行先・状況</th>
+                                </tr>
+                            </thead>
+                        </table>
+                        <div style="position:relative; flex:1; overflow:hidden; display:flex; flex-direction:column;">
+                            <div id="trains-down-scroll-container" class="scr" style="overflow-y:auto; flex:1; scroll-behavior:smooth;">
+                                <table style="width:100%; table-layout:fixed;">
+                                    <tbody id="trains-down-body"></tbody>
+                                </table>
+                            </div>
+                            <div style="pointer-events:none; position:absolute; bottom:0; left:0; right:0; height:5vh; background:linear-gradient(to bottom, transparent, var(--bg-surface));"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Buses (1/3) -->
+        <section id="bus-section" class="panel" style="width:33.333%; display:flex; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out;">
+            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
+                <span class="chip" style="background:rgba(255,176,32,0.12); color:var(--amber); border:1px solid rgba(255,176,32,0.3);">BUS</span>
+                <span style="font-size:1.3vw; font-weight:700;">京阪バス</span>
+            </div>
+            <div id="bus-container" class="scr" style="flex:1; overflow-y:auto; padding:0.8vw; display:flex; flex-direction:column; gap:1vh;"></div>
+        </section>
+
+        <!-- Delay Sidebar (hidden by default) -->
+        <section id="delay-sidebar" class="panel" style="display:none; width:0; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out; border-color:rgba(255,48,69,0.35);">
+            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:rgba(255,48,69,0.07); border-bottom:1px solid rgba(255,48,69,0.25);">
+                <span class="chip" style="background:rgba(255,48,69,0.15); color:var(--red); border:1px solid rgba(255,48,69,0.35);">INFO</span>
+                <span style="font-size:1.3vw; font-weight:700;">運行情報</span>
+            </div>
+            <div id="delay-sidebar-content" class="scr" style="flex:1; overflow-y:auto; padding:0.8vw; display:flex; flex-direction:column; gap:1vh;"></div>
+        </section>
+
+    </main>
+
+    <!-- ─── Footer ─── -->
+    <footer id="footer-section" class="panel" style="flex-shrink:0; min-height:12vh; max-height:25vh; display:flex; overflow:hidden; transition:all 0.5s ease-in-out;">
+        <div style="flex-shrink:0; width:9vw; display:flex; align-items:center; justify-content:center; background:rgba(255,48,69,0.07); border-right:1px solid rgba(255,48,69,0.2);">
+            <span class="writing-v font-syne" style="font-size:1.5vw; font-weight:700; color:var(--red); letter-spacing:0.25em; padding: 1.5vh 0;">運行情報</span>
+        </div>
+        <div class="scr" style="flex:1; overflow-y:auto; padding:0 1vw; background:var(--bg-surface);">
+            <div id="delay-container" style="padding:1.5vh 0;">
+                <div class="pulse" style="font-size:1.4vw; font-weight:700; color:var(--tx-dim);">情報を取得中...</div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // --- Configuration ---
+        const REFRESH_INTERVAL_TRAIN = 60000;
+        const REFRESH_INTERVAL_BUS   = 120000;
+        const REFRESH_INTERVAL_DELAY = 120000;
+
+        // --- Train type colors (Keihan brand) ---
+        const TRAIN_COLORS = {
+            "快速特急 洛楽": { bg: "#F08080", text: "#FFFFFF" },
+            "快速特急":       { bg: "#F08080", text: "#FFFFFF" },
+            "ライナー":       { bg: "#FFFFFF", text: "#E60012", border: "#E60012" },
+            "特急":           { bg: "#E60012", text: "#FFFFFF", shadow: "0 0 0.5vw rgba(230,0,18,0.4)" },
+            "通勤快急":       { bg: "#800080", text: "#FFFFFF" },
+            "快速急行":       { bg: "#800080", text: "#FFFFFF" },
+            "深夜急行":       { bg: "#FF8C00", text: "#FFFFFF" },
+            "通勤急行":       { bg: "#FF8C00", text: "#FFFFFF" },
+            "急行":           { bg: "#F39800", text: "#FFFFFF" },
+            "通勤準急":       { bg: "#0055AA", text: "#FFFFFF" },
+            "準急":           { bg: "#0066CC", text: "#FFFFFF" },
+            "区間急行":       { bg: "#007A33", text: "#FFFFFF" },
+            "普通":           { bg: "#333333", text: "#FFFFFF", border: "#555555" },
+            "臨時":           { bg: "#708090", text: "#FFFFFF" }
+        };
+
+        function getTrainStyle(type) {
+            const c = TRAIN_COLORS[type];
+            if (!c) return "background-color:#009944; color:#FFFFFF;";
+            let s = `background-color:${c.bg}; color:${c.text};`;
+            if (c.border) s += ` border:2px solid ${c.border};`;
+            if (c.shadow) s += ` box-shadow:${c.shadow};`;
+            return s;
+        }
+
+        // --- Auto Scroll ---
+        class AutoScroller {
+            constructor(containerId) {
+                this.container = document.getElementById(containerId);
+                this.animationId = null;
+                this.speed = 0.5;
+                this.isScrolling = false;
+                this.originalContentHeight = 0;
+            }
+            reset() {
+                this.stop();
+                if (!this.container) return;
+                this.container.querySelectorAll('[aria-hidden="true"]').forEach(el => el.remove());
+                this.container.scrollTop = 0;
+            }
+            start() {
+                if (!this.container) return;
+                requestAnimationFrame(() => {
+                    const content = this.container.firstElementChild;
+                    if (!content) return;
+                    const containerH = this.container.clientHeight;
+                    const contentH   = content.clientHeight;
+                    if (contentH <= containerH) return;
+                    this.originalContentHeight = contentH;
+                    Array.from(this.container.children).forEach(child => {
+                        const clone = child.cloneNode(true);
+                        clone.setAttribute('aria-hidden', 'true');
+                        this.container.appendChild(clone);
+                    });
+                    this.isScrolling = true;
+                    this.scrollLoop();
+                });
+            }
+            scrollLoop() {
+                if (!this.isScrolling) return;
+                this.container.scrollTop += this.speed;
+                if (this.container.scrollTop >= this.originalContentHeight)
+                    this.container.scrollTop -= this.originalContentHeight;
+                this.animationId = requestAnimationFrame(this.scrollLoop.bind(this));
+            }
+            stop() {
+                this.isScrolling = false;
+                if (this.animationId) { cancelAnimationFrame(this.animationId); this.animationId = null; }
+            }
+        }
+
+        const scrollers = { bus: new AutoScroller('bus-container') };
+
+        // --- Fetch ---
+        async function fetchTrains() {
+            try {
+                const res  = await fetch('/api/trains');
+                const data = await res.json();
+                renderTrains('trains-up-body',   data.up_trains);
+                renderTrains('trains-down-body', data.down_trains);
+            } catch (e) { console.error("Train Fetch Error", e); }
+            setTimeout(fetchTrains, REFRESH_INTERVAL_TRAIN);
+        }
+
+        async function fetchBuses() {
+            try {
+                const res  = await fetch('/api/buses');
+                const data = await res.json();
+                scrollers.bus.reset();
+                renderBuses(data);
+                scrollers.bus.start();
+            } catch (e) { console.error("Bus Fetch Error", e); }
+            setTimeout(fetchBuses, REFRESH_INTERVAL_BUS);
+        }
+
+        async function fetchDelays() {
+            try {
+                const res  = await fetch('/api/delays');
+                const data = await res.json();
+                renderDelays(data);
+            } catch (e) { console.error("Delay Fetch Error", e); }
+            setTimeout(fetchDelays, REFRESH_INTERVAL_DELAY);
+        }
+
+        // --- Render: Trains ---
+        function renderTrains(elementId, trainList) {
+            const tbody = document.getElementById(elementId);
+            tbody.innerHTML = '';
+            if (!trainList || trainList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="padding:1vw; text-align:center; color:var(--tx-sec); font-size:1.2vw;">表示可能な情報がありません</td></tr>`;
+                return;
+            }
+            trainList.forEach((t, i) => {
+                const trainStyle = getTrainStyle(t.kind);
+
+                const delayText = t.delay > 0
+                    ? `<span class="pulse" style="color:var(--red); font-weight:700; font-size:0.95vw; display:block; margin-top:0.2vh;">遅れ${t.delay}分</span>`
+                    : '';
+                const statusDisplay = t.status
+                    ? `<span style="background:rgba(255,176,32,0.15); color:var(--amber); padding:0.1vh 0.5vw; border-radius:2px; font-size:0.95vw; border:1px solid rgba(255,176,32,0.25); display:inline-block; margin-top:0.3vh;">${t.status}</span>`
+                    : delayText;
+
+                let minsDisplay = '';
+                if (t.minutes_until) {
+                    let ms = `font-family:'JetBrains Mono',monospace; font-size:1.15vw; color:var(--tx-sec); font-weight:500; display:block; margin-top:0.3vh;`;
+                    if (t.minutes_remaining !== null) {
+                        if (t.minutes_remaining < 20)
+                            ms = `font-family:'JetBrains Mono',monospace; font-size:0.95vw; color:var(--tx-dim); font-weight:400; display:block; margin-top:0.3vh; opacity:0.45;`;
+                        else if (t.minutes_remaining <= 30)
+                            ms = `font-family:'JetBrains Mono',monospace; font-size:1.15vw; color:var(--green); font-weight:700; display:block; margin-top:0.3vh;`;
+                    }
+                    minsDisplay = `<span style="${ms}">${t.minutes_until}</span>`;
+                }
+
+                const rowBg = i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-raised)';
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr style="background:${rowBg}; border-bottom:1px solid var(--bd-sub);">
+                        <td style="padding:1.4vh 0.5vw; width:25%; text-align:center; vertical-align:middle;">
+                            <div style="${trainStyle} padding:0.25vh 0.3vw; border-radius:2px; font-weight:700; text-align:center; font-size:1.2vw; line-height:1.3; min-height:2.4em; display:flex; align-items:center; justify-content:center;">
+                                ${t.kind}
+                            </div>
+                        </td>
+                        <td style="padding:1.4vh 0.5vw; width:28%; text-align:center; vertical-align:middle;">
+                            <div style="font-family:'JetBrains Mono',monospace; font-size:2.2vw; font-weight:700; color:var(--tx-pri); line-height:1; letter-spacing:-0.02em; font-variant-numeric:tabular-nums;">${t.time}</div>
+                            ${minsDisplay}
+                        </td>
+                        <td style="padding:1.4vh 0.5vw; width:47%; vertical-align:middle;">
+                            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                                <div style="font-weight:700; white-space:nowrap; font-size:1.6vw; overflow:hidden; text-overflow:ellipsis; max-width:100%; line-height:1.2;">${t.destination}</div>
+                                ${statusDisplay}
+                            </div>
+                        </td>
+                    </tr>
+                `);
+            });
+        }
+
+        // --- Render: Buses ---
+        function renderBuses(busList) {
+            const container = document.getElementById('bus-container');
+            container.innerHTML = '';
+            if (!busList || busList.length === 0) {
+                container.innerHTML = `<div style="padding:2vw; text-align:center; color:var(--tx-sec); font-size:1.4vw;">バス情報なし</div>`;
+                return;
+            }
+            busList.forEach(b => {
+                container.insertAdjacentHTML('beforeend', `
+                    <div style="background:var(--bg-raised); border:1px solid var(--bd-mid); border-top:2px solid var(--amber); border-radius:2px; padding:0.8vw; display:flex; flex-direction:column; gap:0.5vh;">
+                        <div style="font-weight:700; font-size:1.5vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-bottom:0.3vh; border-bottom:1px solid var(--bd-sub);">
+                            ${b.destination}
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-family:'JetBrains Mono',monospace; color:var(--tx-sec); font-size:1.15vw; overflow:hidden; text-overflow:ellipsis;">${b.arrival_time}</div>
+                            <div style="font-family:'JetBrains Mono',monospace; color:var(--amber); font-weight:700; font-size:1.15vw; background:rgba(255,176,32,0.08); padding:0.1vh 0.6vw; border-radius:2px; border:1px solid rgba(255,176,32,0.2); white-space:nowrap; margin-left:0.5vw;">
+                                ${b.status}
+                            </div>
+                        </div>
+                    </div>
+                `);
+            });
+        }
+
+        // --- Helpers ---
+        function minutesAgo(isoString) {
+            if (!isoString) return null;
+            const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 60000);
+            if (diff < 1) return 'たった今';
+            if (diff >= 120) return `${Math.floor(diff / 60)}時間前`;
+            return `${diff}分前`;
+        }
+
+        // --- Render: Delays ---
+        function renderDelays(delayList) {
+            const footerContainer   = document.getElementById('delay-container');
+            const sidebarContainer  = document.getElementById('delay-sidebar-content');
+            const footerSection     = document.getElementById('footer-section');
+            const delaySidebar      = document.getElementById('delay-sidebar');
+            const trainSection      = document.getElementById('train-section');
+            const busSection        = document.getElementById('bus-section');
+
+            footerContainer.innerHTML  = '';
+            sidebarContainer.innerHTML = '';
+
+            const crucial = (!delayList || delayList.length === 0)
+                ? []
+                : delayList.filter(d => d.status !== '平常運転' && d.status !== '掲載なし');
+
+            if (crucial.length >= 3) {
+                // Sidebar mode
+                footerSection.style.display  = 'none';
+                delaySidebar.style.display   = 'flex';
+                delaySidebar.style.width     = '25%';
+                trainSection.style.width     = '50%';
+                busSection.style.width       = '25%';
+
+                crucial.forEach(d => {
+                    const duration = (8 + (d.detail.length * 0.4)) / 1.4;
+                    const ago = minutesAgo(d.announced_time);
+                    const agoHtml = ago ? `<span style="color:var(--tx-dim); font-size:0.78vw; margin-left:auto; white-space:nowrap;">${ago}に発表</span>` : '';
+                    sidebarContainer.insertAdjacentHTML('beforeend', `
+                        <div style="background:rgba(255,48,69,0.05); border:1px solid rgba(255,48,69,0.18); border-radius:2px; padding:0.6vw; display:flex; flex-direction:column; gap:0.5vh;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:0.4vh; border-bottom:1px solid rgba(255,48,69,0.12);">
+                                <span style="background:var(--red); color:#fff; font-weight:700; padding:0.1vh 0.6vw; font-size:0.88vw; border-radius:2px;">${d.line}</span>
+                                <span style="color:var(--amber); font-weight:700; font-size:1vw; overflow:hidden; text-overflow:ellipsis; margin-left:0.5vw;">${d.status}</span>
+                                ${agoHtml}
+                            </div>
+                            <div style="overflow:hidden; position:relative; height:1.6em; background:rgba(0,0,0,0.1); border-radius:1px; padding:0 0.2vw;">
+                                <div class="marquee" style="color:var(--tx-sec); font-size:0.92vw; line-height:1.6em; animation-duration:${duration}s;">${d.detail}</div>
+                            </div>
+                        </div>
+                    `);
+                });
+
+            } else {
+                // Footer mode
+                footerSection.style.display  = 'flex';
+                delaySidebar.style.display   = 'none';
+                delaySidebar.style.width     = '0';
+                trainSection.style.width     = '66.666%';
+                busSection.style.width       = '33.333%';
+
+                if (crucial.length === 0) {
+                    footerContainer.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:0.8vw; font-size:1.4vw; font-weight:700; color:var(--green);">
+                            <span style="display:inline-block; width:0.65vw; height:0.65vw; border-radius:50%; background:var(--green); flex-shrink:0;"></span>
+                            現在、平常通り運転しています
+                        </div>
+                    `;
+                    return;
+                }
+
+                crucial.forEach(d => {
+                    const ago = minutesAgo(d.announced_time);
+                    const agoHtml = ago ? `<span style="color:var(--tx-sec); font-size:1vw; flex-shrink:0;">${ago}に発表</span>` : '';
+                    footerContainer.insertAdjacentHTML('beforeend', `
+                        <div style="display:flex; flex-direction:column; border-bottom:1px solid var(--bd-sub); padding:1.2vh 0;">
+                            <div style="display:flex; align-items:center; margin-bottom:0.4vh; gap:0.8vw;">
+                                <span style="background:var(--red); color:#fff; font-weight:700; padding:0.2vh 0.8vw; font-size:0.95vw; border-radius:2px; flex-shrink:0;">${d.line}</span>
+                                <span style="color:var(--amber); font-weight:700; font-size:1.4vw; flex-shrink:0;">${d.status}</span>
+                            </div>
+                            <div style="display:flex; align-items:baseline; gap:0.8vw; padding-left:0.5vw;">
+                                ${agoHtml}
+                                <span style="color:var(--tx-sec); font-size:1.1vw; line-height:1.5;">${d.detail}</span>
+                            </div>
+                        </div>
+                    `);
+                });
+            }
+        }
+
+        // --- Clock ---
+        function updateClock() {
+            const now  = new Date();
+            const days = ['日','月','火','水','木','金','土'];
+            document.getElementById('clock-date').innerText =
+                `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} (${days[now.getDay()]})`;
+            document.getElementById('clock-time').innerText =
+                `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        }
+
+        // --- Init ---
+        setInterval(updateClock, 1000);
+        updateClock();
+        fetchTrains();
+        fetchBuses();
+        fetchDelays();
+    </script>
+</body>
+
+</html>

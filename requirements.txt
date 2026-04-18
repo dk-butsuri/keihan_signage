@@ -1,0 +1,6 @@
+git+https://github.com/dk-butsuri/keihan_tracker.git
+fastapi
+jinja2
+uvicorn
+python-dotenv
+google-genai

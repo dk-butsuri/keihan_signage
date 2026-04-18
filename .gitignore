@@ -1,0 +1,23 @@
+# 環境変数・シークレット
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# テスト・開発
+.pytest_cache/
+tracker_info.txt
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.log
