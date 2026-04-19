@@ -1,0 +1,7 @@
+{
+  "default_mode": "transit",
+  "rules": [
+    {"time": "07:30", "mode": "transit"},
+    {"time": "18:30", "mode": "clock"}
+  ]
+}

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html style="margin:0;padding:0;width:100%;height:100%">
+<head>
+    <meta charset="UTF-8">
+    <title>サイネージ</title>
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+        iframe { width: 100%; height: 100%; border: none; display: block; }
+        #maintenance {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #0d1117;
+            color: #e6edf3;
+            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        #maintenance.active { display: flex; }
+        #maintenance h1 { font-size: 3.5rem; margin: 0 0 1.5rem; letter-spacing: 0.15em; }
+        #maintenance p { font-size: 1.4rem; color: #8b949e; margin: 0; }
+    </style>
+</head>
+<body>
+    <iframe id="f" src="/transit/"></iframe>
+    <div id="maintenance">
+        <h1>メンテナンス中</h1>
+        <p id="maintenance-time"></p>
+    </div>
+    <script>
+        var currentMode = 'transit';
+        var lastOk = Date.now();
+        var maintenanceStart = null;
+        var TIMEOUT_MS = 60000;
+        var CHECK_INTERVAL_MS = 15000;
+
+        function setMode(m) {
+            currentMode = m;
+            document.getElementById('f').src = '/' + m + '/';
+        }
+
+        function showMaintenance() {
+            var el = document.getElementById('maintenance');
+            if (!el.classList.contains('active')) {
+                if (!maintenanceStart) maintenanceStart = new Date();
+                var d = maintenanceStart;
+                var fmt = d.getFullYear() + '/' +
+                    ('0' + (d.getMonth()+1)).slice(-2) + '/' +
+                    ('0' + d.getDate()).slice(-2) + ' ' +
+                    ('0' + d.getHours()).slice(-2) + ':' +
+                    ('0' + d.getMinutes()).slice(-2);
+                document.getElementById('maintenance-time').textContent = 'メンテナンス開始: ' + fmt;
+                el.classList.add('active');
+            }
+        }
+
+        function hideMaintenance() {
+            document.getElementById('maintenance').classList.remove('active');
+            maintenanceStart = null;
+            lastOk = Date.now();
+        }
+
+        function healthCheck() {
+            var controller = new AbortController();
+            var timer = setTimeout(function() { controller.abort(); }, 10000);
+            fetch('/' + currentMode + '/', { method: 'HEAD', signal: controller.signal })
+                .then(function(resp) {
+                    clearTimeout(timer);
+                    if (resp.status < 500) {
+                        lastOk = Date.now();
+                        hideMaintenance();
+                    } else {
+                        if (Date.now() - lastOk > TIMEOUT_MS) showMaintenance();
+                    }
+                })
+                .catch(function() {
+                    clearTimeout(timer);
+                    if (Date.now() - lastOk > TIMEOUT_MS) showMaintenance();
+                });
+        }
+
+        fetch('/api/mode').then(function(r) { return r.json(); }).then(function(d) { setMode(d.mode); });
+
+        var es = new EventSource('/api/mode/stream');
+        es.onmessage = function(e) { setMode(JSON.parse(e.data).mode); };
+
+        setInterval(healthCheck, CHECK_INTERVAL_MS);
+        setTimeout(healthCheck, 5000);
+    </script>
+</body>
+</html>

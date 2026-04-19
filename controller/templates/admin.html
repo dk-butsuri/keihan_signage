@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>サイネージ管理</title>
+    <style>
+        :root {
+            --bg: #0d1117; --surface: #161b22; --border: #30363d;
+            --tx: #e6edf3; --tx-sec: #7d8590;
+            --blue: #388bfd; --green: #3fb950; --red: #f85149; --amber: #d29922;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            margin: 0; font-family: -apple-system, 'Segoe UI', sans-serif;
+            background: var(--bg); color: var(--tx);
+            min-height: 100vh; padding: 2rem;
+        }
+        h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; color: var(--tx); }
+        h2 { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--tx-sec); text-transform: uppercase; letter-spacing: 0.05em; }
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem;
+        }
+        .status-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
+        }
+        .badge.transit { background: rgba(56,139,253,0.15); color: var(--blue); border: 1px solid rgba(56,139,253,0.3); }
+        .badge.clock   { background: rgba(63,185,80,0.15);  color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+        .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        button {
+            padding: 0.5rem 1.25rem; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--surface); color: var(--tx); font-size: 0.9rem; cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        button:hover { background: #21262d; }
+        button.active-transit { background: rgba(56,139,253,0.2); border-color: var(--blue); color: var(--blue); }
+        button.active-clock   { background: rgba(63,185,80,0.2);  border-color: var(--green); color: var(--green); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+        th { color: var(--tx-sec); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+        tr:last-child td { border-bottom: none; }
+        .del-btn {
+            padding: 0.25rem 0.6rem; font-size: 0.8rem; color: var(--red);
+            border-color: rgba(248,81,73,0.3); background: rgba(248,81,73,0.05);
+        }
+        .del-btn:hover { background: rgba(248,81,73,0.15); }
+        .add-row { display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap; }
+        input[type="time"], select {
+            background: var(--bg); color: var(--tx); border: 1px solid var(--border);
+            border-radius: 6px; padding: 0.45rem 0.75rem; font-size: 0.9rem;
+        }
+        .token-row { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+        input[type="password"] {
+            flex: 1; background: var(--bg); color: var(--tx);
+            border: 1px solid var(--border); border-radius: 6px;
+            padding: 0.45rem 0.75rem; font-size: 0.9rem;
+        }
+        .save-btn { background: rgba(56,139,253,0.15); color: var(--blue); border-color: rgba(56,139,253,0.3); }
+        .save-btn:hover { background: rgba(56,139,253,0.3); }
+        #msg { font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+        .ok  { color: var(--green); }
+        .err { color: var(--red); }
+    </style>
+</head>
+<body>
+    <h1>サイネージ管理</h1>
+
+    <div class="card">
+        <h2>認証トークン</h2>
+        <div class="token-row">
+            <input type="password" id="token" placeholder="Admin token">
+            <button onclick="saveToken()">保存</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>現在のモード</h2>
+        <div class="status-row">
+            <span class="badge transit" id="badge"><span class="dot"></span>読み込み中…</span>
+        </div>
+        <div class="btn-row">
+            <button id="btn-transit" onclick="switchMode('transit')">電車・バス情報</button>
+            <button id="btn-clock"   onclick="switchMode('clock')">大時計</button>
+        </div>
+        <div id="msg"></div>
+    </div>
+
+    <div class="card">
+        <h2>自動スケジュール</h2>
+        <table>
+            <thead><tr><th>時刻</th><th>モード</th><th></th></tr></thead>
+            <tbody id="schedule-body"></tbody>
+        </table>
+        <div class="add-row">
+            <input type="time" id="new-time" value="07:30">
+            <select id="new-mode">
+                <option value="transit">電車・バス情報</option>
+                <option value="clock">大時計</option>
+            </select>
+            <button class="save-btn" onclick="addRule()">+ 追加</button>
+        </div>
+    </div>
+
+    <script>
+        const MODE_LABELS = { transit: '電車・バス情報', clock: '大時計' };
+
+        function getToken() { return localStorage.getItem('admin_token') || ''; }
+        function saveToken() {
+            localStorage.setItem('admin_token', document.getElementById('token').value);
+            showMsg('トークンを保存しました', true);
+        }
+
+        function showMsg(text, ok) {
+            const el = document.getElementById('msg');
+            el.textContent = text;
+            el.className = ok ? 'ok' : 'err';
+            setTimeout(() => el.textContent = '', 3000);
+        }
+
+        function updateBadge(mode) {
+            const badge = document.getElementById('badge');
+            badge.className = `badge ${mode}`;
+            badge.innerHTML = `<span class="dot"></span>${MODE_LABELS[mode] ?? mode}`;
+            document.getElementById('btn-transit').className = mode === 'transit' ? 'active-transit' : '';
+            document.getElementById('btn-clock').className   = mode === 'clock'   ? 'active-clock'   : '';
+        }
+
+        async function switchMode(mode) {
+            const res = await fetch('/api/mode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+                body: JSON.stringify({ mode })
+            });
+            if (res.ok) { updateBadge(mode); showMsg('切り替えました', true); }
+            else showMsg('エラー: トークンを確認してください', false);
+        }
+
+        // SSE でリアルタイム更新
+        fetch('/api/mode').then(r=>r.json()).then(d => updateBadge(d.mode));
+        const es = new EventSource('/api/mode/stream');
+        es.onmessage = e => updateBadge(JSON.parse(e.data).mode);
+
+        // スケジュール
+        let scheduleData = { default_mode: 'transit', rules: [] };
+
+        async function loadSchedule() {
+            const res = await fetch('/api/schedule');
+            scheduleData = await res.json();
+            renderSchedule();
+        }
+
+        function renderSchedule() {
+            const tbody = document.getElementById('schedule-body');
+            tbody.innerHTML = '';
+            const rules = scheduleData.rules || [];
+            rules.sort((a,b) => a.time.localeCompare(b.time));
+            rules.forEach((r, i) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${r.time}</td><td>${MODE_LABELS[r.mode] ?? r.mode}</td>
+                    <td><button class="del-btn" onclick="deleteRule(${i})">削除</button></td>`;
+                tbody.appendChild(tr);
+            });
+            if (!rules.length) {
+                tbody.innerHTML = `<tr><td colspan="3" style="color:var(--tx-sec);font-size:0.85rem">スケジュールなし</td></tr>`;
+            }
+        }
+
+        async function saveSchedule() {
+            const res = await fetch('/api/schedule', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+                body: JSON.stringify(scheduleData)
+            });
+            if (res.ok) showMsg('スケジュールを保存しました', true);
+            else showMsg('エラー: トークンを確認してください', false);
+        }
+
+        function addRule() {
+            const time = document.getElementById('new-time').value;
+            const mode = document.getElementById('new-mode').value;
+            if (!time) { showMsg('時刻を入力してください', false); return; }
+            scheduleData.rules = scheduleData.rules || [];
+            scheduleData.rules.push({ time, mode });
+            renderSchedule();
+            saveSchedule();
+        }
+
+        function deleteRule(i) {
+            scheduleData.rules.splice(i, 1);
+            renderSchedule();
+            saveSchedule();
+        }
+
+        // 初期化
+        document.getElementById('token').value = getToken();
+        loadSchedule();
+    </script>
+</body>
+</html>

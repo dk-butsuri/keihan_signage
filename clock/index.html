@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>時計</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Noto+Sans+JP:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:    #020509;
+            --tx:    #FFFFFF;
+            --tx-sec:#99BBDD;
+            --blue:  #3A7FFF;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body {
+            height: 100%; margin: 0; padding: 0;
+            background: var(--bg);
+            color: var(--tx);
+            overflow: hidden;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2vh;
+        }
+        .time {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: clamp(4rem, 18vw, 20rem);
+            line-height: 1;
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+            color: var(--tx);
+            text-shadow: 0 0 40px rgba(58,127,255,0.4);
+            padding: 0 5vw;
+        }
+        .date {
+            font-family: 'Noto Sans JP', sans-serif;
+            font-weight: 700;
+            font-size: 4vw;
+            color: var(--tx-sec);
+            letter-spacing: 0.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="time" id="time">00:00:00</div>
+    <div class="date" id="date"></div>
+    <script>
+        const DAYS = ['日','月','火','水','木','金','土'];
+        var offset = 0; // ms: Date.now() + offset = 推定NTP時刻
+
+        function tick() {
+            var now = new Date(Date.now() + offset);
+            var h = String(now.getHours()).padStart(2,'0');
+            var m = String(now.getMinutes()).padStart(2,'0');
+            var s = String(now.getSeconds()).padStart(2,'0');
+            document.getElementById('time').textContent = h + ':' + m + ':' + s;
+            var y = now.getFullYear();
+            var mo = now.getMonth() + 1;
+            var d = now.getDate();
+            var w = DAYS[now.getDay()];
+            document.getElementById('date').textContent = y + '年' + mo + '月' + d + '日（' + w + '）';
+        }
+
+        function schedule() {
+            var corrected = Date.now() + offset;
+            var delay = 1000 - (corrected % 1000);
+            setTimeout(function() { tick(); schedule(); }, delay);
+        }
+
+        function sampleOnce() {
+            var t0 = performance.now();
+            return fetch('/api/time')
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    var t1 = performance.now();
+                    var httpRtt = t1 - t0;
+                    return {
+                        estimated: data.ts * 1000 + httpRtt / 2,
+                        errorBound: (httpRtt + data.ntp_rtt_ms) / 2
+                    };
+                });
+        }
+
+        function syncTime() {
+            var promises = [];
+            for (var i = 0; i < 5; i++) promises.push(sampleOnce());
+            Promise.all(promises).then(function(samples) {
+                var best = samples.reduce(function(a, b) {
+                    return a.errorBound < b.errorBound ? a : b;
+                });
+                offset = best.estimated - Date.now();
+                console.log('[clock] synced. error bound ≤ ' + best.errorBound.toFixed(1) + 'ms');
+            }).catch(function(e) {
+                console.warn('[clock] sync failed, using previous offset:', e);
+            });
+        }
+
+        syncTime();
+        setInterval(syncTime, 5 * 60 * 1000);
+        tick();
+        schedule();
+    </script>
+</body>
+</html>

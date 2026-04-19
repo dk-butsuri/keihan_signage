@@ -1,12 +1,34 @@
 services:
-  app:
-    build: .
+  controller:
+    build: ./controller
     ports:
-      - "8000:8000"
+      - "8880:8080"
+    volumes:
+      - ./controller_data:/app/data
+    environment:
+      - TZ=Asia/Tokyo
+      - TRANSIT_URL=http://transit:8000
+      - CLOCK_URL=http://clock:80
+      - ADMIN_TOKEN=changeme
+    restart: always
+    depends_on:
+      - transit
+      - clock
+
+  transit:
+    build: .
+    expose:
+      - "8000"
     volumes:
       - ./volume:/app/data
     environment:
       - TZ=Asia/Tokyo
     env_file:
       - .env
+    restart: always
+
+  clock:
+    build: ./clock
+    expose:
+      - "80"
     restart: always
