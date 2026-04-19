@@ -1,9 +1,9 @@
 import asyncio
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -24,6 +24,7 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 current_mode: str = "transit"
+manual_override_until: Optional[datetime] = None
 subscribers: list[asyncio.Queue] = []
 
 
@@ -44,10 +45,13 @@ async def broadcast_mode(mode: str) -> None:
 
 
 async def schedule_loop() -> None:
-    global current_mode
+    global current_mode, manual_override_until
     while True:
         await asyncio.sleep(30)
         try:
+            if manual_override_until and datetime.now() < manual_override_until:
+                continue
+            manual_override_until = None
             sched = load_schedule()
             now = datetime.now()
             now_str = f"{now.hour:02d}:{now.minute:02d}"
@@ -94,10 +98,12 @@ async def set_mode(request: Request):
     mode = body.get("mode")
     if mode not in VALID_MODES:
         raise HTTPException(status_code=400, detail=f"mode must be one of {VALID_MODES}")
-    global current_mode
+    override_minutes = int(body.get("override_minutes", 60))
+    global current_mode, manual_override_until
     current_mode = mode
+    manual_override_until = datetime.now() + timedelta(minutes=override_minutes)
     await broadcast_mode(current_mode)
-    return {"mode": current_mode}
+    return {"mode": current_mode, "override_until": manual_override_until.isoformat()}
 
 
 @app.get("/api/mode/stream")
