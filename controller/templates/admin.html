@@ -6,7 +6,7 @@
     <title>サイネージ管理</title>
     <style>
         :root {
-            --bg: #0d1117; --surface: #161b22; --border: #30363d;
+            --bg: #0d1117; --surface: #161b22; --surface2: #1c2128; --border: #30363d;
             --tx: #e6edf3; --tx-sec: #7d8590;
             --blue: #388bfd; --green: #3fb950; --red: #f85149; --amber: #d29922;
         }
@@ -14,23 +14,37 @@
         body {
             margin: 0; font-family: -apple-system, 'Segoe UI', sans-serif;
             background: var(--bg); color: var(--tx);
-            min-height: 100vh; padding: 2rem;
+            min-height: 100vh; padding: 2rem; max-width: 720px;
         }
-        h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; color: var(--tx); }
-        h2 { font-size: 0.9rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--tx-sec); text-transform: uppercase; letter-spacing: 0.05em; }
+        h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; }
+        h2 { font-size: 0.8rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--tx-sec); text-transform: uppercase; letter-spacing: 0.05em; }
+        h3 { font-size: 0.85rem; font-weight: 600; margin: 1.25rem 0 0.6rem; color: var(--tx); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+        h3:first-of-type { margin-top: 0; }
         .card {
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem;
         }
-        .status-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+        .card.disabled-card { opacity: 0.45; pointer-events: none; }
+
+        /* --- Badges --- */
         .badge {
             display: inline-flex; align-items: center; gap: 0.4rem;
             padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
         }
         .badge.transit { background: rgba(56,139,253,0.15); color: var(--blue); border: 1px solid rgba(56,139,253,0.3); }
         .badge.clock   { background: rgba(63,185,80,0.15);  color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+        .badge.manual  { background: rgba(210,153,34,0.15); color: var(--amber); border: 1px solid rgba(210,153,34,0.3); }
+        .badge.schedule{ background: rgba(125,133,144,0.15);color: var(--tx-sec); border: 1px solid var(--border); }
         .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-        .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+        /* --- Mode card --- */
+        .status-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .override-note { font-size: 0.8rem; color: var(--tx-sec); margin-bottom: 1rem; }
+        .override-note span { color: var(--amber); }
+        .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+        .divider { width: 1px; height: 24px; background: var(--border); margin: 0 0.25rem; }
+
+        /* --- Buttons --- */
         button {
             padding: 0.5rem 1.25rem; border-radius: 6px; border: 1px solid var(--border);
             background: var(--surface); color: var(--tx); font-size: 0.9rem; cursor: pointer;
@@ -39,36 +53,135 @@
         button:hover { background: #21262d; }
         button.active-transit { background: rgba(56,139,253,0.2); border-color: var(--blue); color: var(--blue); }
         button.active-clock   { background: rgba(63,185,80,0.2);  border-color: var(--green); color: var(--green); }
+        button.sched-btn { background: rgba(210,153,34,0.1); border-color: rgba(210,153,34,0.4); color: var(--amber); font-size: 0.85rem; padding: 0.4rem 1rem; }
+        button.sched-btn:hover { background: rgba(210,153,34,0.25); }
+        button.save-btn { background: rgba(56,139,253,0.15); color: var(--blue); border-color: rgba(56,139,253,0.3); }
+        button.save-btn:hover { background: rgba(56,139,253,0.3); }
+        button.danger-btn { background: rgba(248,81,73,0.05); color: var(--red); border-color: rgba(248,81,73,0.3); }
+        button.danger-btn:hover { background: rgba(248,81,73,0.15); }
+
+        /* --- Form controls --- */
+        select, input[type="time"], input[type="password"], input[type="text"], input[type="number"] {
+            background: var(--bg); color: var(--tx); border: 1px solid var(--border);
+            border-radius: 6px; padding: 0.45rem 0.75rem; font-size: 0.9rem;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--blue); }
+        label { font-size: 0.85rem; color: var(--tx-sec); }
+
+        /* --- Schedule table --- */
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
         th { color: var(--tx-sec); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
         tr:last-child td { border-bottom: none; }
-        .del-btn {
-            padding: 0.25rem 0.6rem; font-size: 0.8rem; color: var(--red);
-            border-color: rgba(248,81,73,0.3); background: rgba(248,81,73,0.05);
-        }
+        .del-btn { padding: 0.25rem 0.6rem; font-size: 0.8rem; color: var(--red); border-color: rgba(248,81,73,0.3); background: rgba(248,81,73,0.05); }
         .del-btn:hover { background: rgba(248,81,73,0.15); }
-        .add-row { display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap; }
-        input[type="time"], select {
-            background: var(--bg); color: var(--tx); border: 1px solid var(--border);
-            border-radius: 6px; padding: 0.45rem 0.75rem; font-size: 0.9rem;
+        .add-row { display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap; align-items: center; }
+        .default-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; align-items: center; }
+        .token-row { display: flex; gap: 0.75rem; }
+        input[type="password"] { flex: 1; }
+
+        /* --- Config form --- */
+        .cfg-row {
+            display: flex; align-items: center; gap: 1rem;
+            padding: 0.6rem 0; border-bottom: 1px solid var(--border);
         }
-        .token-row { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
-        input[type="password"] {
-            flex: 1; background: var(--bg); color: var(--tx);
-            border: 1px solid var(--border); border-radius: 6px;
-            padding: 0.45rem 0.75rem; font-size: 0.9rem;
+        .cfg-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .cfg-label { flex: 0 0 160px; font-size: 0.9rem; color: var(--tx); }
+        .cfg-hint { font-size: 0.75rem; color: var(--tx-sec); margin-top: 0.15rem; }
+        .cfg-control { flex: 1; display: flex; align-items: center; gap: 0.5rem; }
+
+        /* Toggle switch */
+        .toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; inset: 0; background: var(--border);
+            border-radius: 24px; cursor: pointer; transition: background 0.2s;
         }
-        .save-btn { background: rgba(56,139,253,0.15); color: var(--blue); border-color: rgba(56,139,253,0.3); }
-        .save-btn:hover { background: rgba(56,139,253,0.3); }
-        #msg { font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+        .toggle-slider::before {
+            content: ''; position: absolute; width: 18px; height: 18px;
+            left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s;
+        }
+        .toggle input:checked + .toggle-slider { background: var(--green); }
+        .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+        /* Theme picker */
+        .theme-picker { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .theme-btn {
+            padding: 0.35rem 0.85rem; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--surface2); color: var(--tx-sec); font-size: 0.82rem; cursor: pointer;
+            transition: all 0.15s; display: flex; align-items: center; gap: 0.4rem;
+        }
+        .theme-btn:hover { border-color: var(--blue); color: var(--tx); }
+        .theme-btn.active { border-color: var(--blue); background: rgba(56,139,253,0.15); color: var(--blue); }
+        .theme-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+        /* Segmented control */
+        .seg-ctrl { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .seg-btn {
+            padding: 0.35rem 1rem; border: none; background: var(--surface2);
+            color: var(--tx-sec); font-size: 0.85rem; cursor: pointer; flex: 1;
+            border-right: 1px solid var(--border); transition: all 0.15s;
+        }
+        .seg-btn:last-child { border-right: none; }
+        .seg-btn.active { background: rgba(56,139,253,0.2); color: var(--blue); font-weight: 600; }
+        .seg-btn:hover:not(.active) { background: #21262d; }
+
+        /* Slider */
+        .slider-wrap { display: flex; align-items: center; gap: 0.75rem; flex: 1; }
+        input[type="range"] {
+            -webkit-appearance: none; flex: 1; height: 4px;
+            background: var(--border); border-radius: 4px; outline: none; cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px;
+            border-radius: 50%; background: var(--blue); cursor: pointer;
+        }
+        .slider-val { min-width: 60px; font-size: 0.85rem; color: var(--tx); text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* Stepper */
+        .stepper { display: flex; align-items: center; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .step-btn { padding: 0.35rem 0.75rem; background: var(--surface2); border: none; color: var(--tx); cursor: pointer; font-size: 1rem; line-height: 1; }
+        .step-btn:hover { background: #21262d; }
+        .step-val { padding: 0.35rem 0.75rem; font-size: 0.9rem; min-width: 40px; text-align: center; background: var(--bg); border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+
+        /* Chips */
+        .chips-wrap { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+        .chip {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            padding: 0.2rem 0.6rem; background: rgba(56,139,253,0.1);
+            border: 1px solid rgba(56,139,253,0.3); border-radius: 999px;
+            font-size: 0.82rem; color: var(--blue);
+        }
+        .chip-del { cursor: pointer; opacity: 0.6; font-size: 0.9rem; line-height: 1; padding: 0 0.1rem; }
+        .chip-del:hover { opacity: 1; }
+        .chip-add { display: flex; align-items: center; gap: 0.4rem; }
+        .chip-add input[type="number"] { width: 70px; padding: 0.25rem 0.5rem; font-size: 0.85rem; }
+
+        /* Warning / info notes */
+        .warn-note {
+            display: flex; align-items: flex-start; gap: 0.5rem;
+            background: rgba(210,153,34,0.08); border: 1px solid rgba(210,153,34,0.25);
+            border-radius: 6px; padding: 0.6rem 0.75rem; font-size: 0.82rem; color: var(--amber);
+            margin-top: 0.75rem;
+        }
+        .warn-note.info { background: rgba(56,139,253,0.08); border-color: rgba(56,139,253,0.25); color: var(--blue); }
+
+        /* Messages */
+        #msg, #cfg-msg { font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
         .ok  { color: var(--green); }
         .err { color: var(--red); }
+
+        /* Save bar */
+        .cfg-save-bar {
+            display: flex; align-items: center; gap: 1rem;
+            margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border);
+        }
     </style>
 </head>
 <body>
     <h1>サイネージ管理</h1>
 
+    <!-- 認証 -->
     <div class="card">
         <h2>認証トークン</h2>
         <div class="token-row">
@@ -77,20 +190,46 @@
         </div>
     </div>
 
+    <!-- モード -->
     <div class="card">
         <h2>現在のモード</h2>
         <div class="status-row">
-            <span class="badge transit" id="badge"><span class="dot"></span>読み込み中…</span>
+            <span class="badge transit" id="mode-badge"><span class="dot"></span>読み込み中…</span>
+            <span class="badge schedule" id="source-badge">—</span>
+        </div>
+        <div class="override-note" id="override-note" style="display:none">
+            手動上書き中 — <span id="override-until"></span> まで
         </div>
         <div class="btn-row">
             <button id="btn-transit" onclick="switchMode('transit')">電車・バス情報</button>
             <button id="btn-clock"   onclick="switchMode('clock')">大時計</button>
+            <div class="divider"></div>
+            <label>上書き時間</label>
+            <select id="override-minutes">
+                <option value="30">30分</option>
+                <option value="60" selected>1時間</option>
+                <option value="120">2時間</option>
+                <option value="360">6時間</option>
+                <option value="1440">24時間</option>
+            </select>
+            <div class="divider"></div>
+            <button class="sched-btn" id="sched-btn" onclick="returnToSchedule()" style="display:none">
+                ↺ スケジュールに戻す
+            </button>
         </div>
         <div id="msg"></div>
     </div>
 
+    <!-- スケジュール -->
     <div class="card">
         <h2>自動スケジュール</h2>
+        <div class="default-row">
+            <label>デフォルトモード</label>
+            <select id="default-mode">
+                <option value="transit">電車・バス情報</option>
+                <option value="clock">大時計</option>
+            </select>
+        </div>
         <table>
             <thead><tr><th>時刻</th><th>モード</th><th></th></tr></thead>
             <tbody id="schedule-body"></tbody>
@@ -105,71 +244,261 @@
         </div>
     </div>
 
+    <!-- アプリ設定 -->
+    <div class="card">
+        <h2>アプリ設定</h2>
+
+        <h3>デザイン</h3>
+        <div class="cfg-row">
+            <div class="cfg-label">テーマ</div>
+            <div class="cfg-control">
+                <div class="theme-picker" id="theme-picker">
+                    <button class="theme-btn" data-theme="dark"         onclick="setTheme(this)"><span class="theme-swatch" style="background:#0d1117;border:1px solid #555"></span>ダーク</button>
+                    <button class="theme-btn" data-theme="light"        onclick="setTheme(this)"><span class="theme-swatch" style="background:#f5f5f5;border:1px solid #ccc"></span>ライト</button>
+                    <button class="theme-btn" data-theme="retro"        onclick="setTheme(this)"><span class="theme-swatch" style="background:#1a0a00;border:1px solid #c84"></span>レトロ</button>
+                    <button class="theme-btn" data-theme="high-contrast" onclick="setTheme(this)"><span class="theme-swatch" style="background:#000;border:2px solid #ff0"></span>高コントラスト</button>
+                    <button class="theme-btn" data-theme="keihan-led"   onclick="setTheme(this)"><span class="theme-swatch" style="background:#001800;border:1px solid #0f0"></span>京阪LED</button>
+                </div>
+            </div>
+        </div>
+
+        <h3>機能</h3>
+        <div class="cfg-row">
+            <div class="cfg-label">列車情報</div>
+            <div class="cfg-control">
+                <label class="toggle"><input type="checkbox" id="feat-trains" onchange="onFeatureChange()"><span class="toggle-slider"></span></label>
+            </div>
+        </div>
+        <div class="cfg-row">
+            <div class="cfg-label">バス情報</div>
+            <div class="cfg-control">
+                <label class="toggle"><input type="checkbox" id="feat-buses" onchange="onFeatureChange()"><span class="toggle-slider"></span></label>
+            </div>
+        </div>
+        <div class="cfg-row">
+            <div class="cfg-label">遅延情報</div>
+            <div class="cfg-control">
+                <label class="toggle"><input type="checkbox" id="feat-delays" onchange="onFeatureChange()"><span class="toggle-slider"></span></label>
+            </div>
+        </div>
+
+        <h3>列車設定</h3>
+        <div id="trains-section">
+            <div class="cfg-row">
+                <div class="cfg-label">
+                    駅番号
+                    <div class="cfg-hint">例: 18 = 香里園 KH18</div>
+                </div>
+                <div class="cfg-control">
+                    <input type="number" id="train-station-id" min="1" max="999" style="width:90px">
+                </div>
+            </div>
+            <div class="cfg-row">
+                <div class="cfg-label">
+                    非表示の閾値
+                    <div class="cfg-hint">これ未満の列車を非表示</div>
+                </div>
+                <div class="cfg-control">
+                    <div class="slider-wrap">
+                        <input type="range" id="train-min-min" min="0" max="60" step="1" oninput="syncSlider('train-min-min','train-min-min-val','分')">
+                        <span class="slider-val" id="train-min-min-val">—分</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cfg-row">
+                <div class="cfg-label">
+                    最大表示本数
+                    <div class="cfg-hint">上り・下りそれぞれ</div>
+                </div>
+                <div class="cfg-control">
+                    <div class="stepper">
+                        <button class="step-btn" onclick="step('train-max-dir',-1,1,20)">−</button>
+                        <span class="step-val" id="train-max-dir">6</span>
+                        <button class="step-btn" onclick="step('train-max-dir',+1,1,20)">＋</button>
+                    </div>
+                    <span style="font-size:0.82rem;color:var(--tx-sec)">本</span>
+                </div>
+            </div>
+        </div>
+
+        <h3>バス設定</h3>
+        <div id="buses-section">
+            <div class="cfg-row">
+                <div class="cfg-label">バス停名</div>
+                <div class="cfg-control">
+                    <input type="text" id="bus-stop-name" style="flex:1">
+                </div>
+            </div>
+            <div class="cfg-row">
+                <div class="cfg-label">
+                    のりば番号
+                    <div class="cfg-hint">取得する番号を追加</div>
+                </div>
+                <div class="cfg-control" style="flex-direction:column;align-items:flex-start;gap:0.5rem">
+                    <div class="chips-wrap" id="bus-stop-chips"></div>
+                    <div class="chip-add">
+                        <input type="number" id="bus-stop-new" min="1" max="99" placeholder="番号">
+                        <button onclick="addBusStop()">＋ 追加</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h3>遅延情報</h3>
+        <div id="delays-section">
+            <div class="cfg-row">
+                <div class="cfg-label">データソース</div>
+                <div class="cfg-control">
+                    <div class="seg-ctrl">
+                        <button class="seg-btn active" id="src-yahoo"   onclick="setDelaySource('yahoo')">Yahoo! 路線</button>
+                        <button class="seg-btn"         id="src-ekispert" onclick="setDelaySource('ekispert')">駅すぱあと</button>
+                    </div>
+                </div>
+            </div>
+            <div class="warn-note" id="ekispert-warn" style="display:none">
+                ⚠ 駅すぱあとを使用するには .env に <strong>EKISPERT_API_KEY</strong> が必要です
+            </div>
+            <div class="cfg-row">
+                <div class="cfg-label">
+                    AI整形
+                    <div class="cfg-hint">Gemini で文章を整形</div>
+                </div>
+                <div class="cfg-control">
+                    <label class="toggle"><input type="checkbox" id="delay-use-ai"><span class="toggle-slider"></span></label>
+                </div>
+            </div>
+            <div class="warn-note info" id="ai-warn" style="display:none">
+                ℹ AI整形には .env に <strong>GOOGLE_API_KEY</strong> が必要です
+            </div>
+        </div>
+
+        <h3>更新間隔</h3>
+        <div class="cfg-row">
+            <div class="cfg-label">列車データ</div>
+            <div class="cfg-control">
+                <div class="slider-wrap">
+                    <input type="range" id="iv-train" min="15" max="300" step="15" oninput="syncSlider('iv-train','iv-train-val','秒')">
+                    <span class="slider-val" id="iv-train-val">—秒</span>
+                </div>
+            </div>
+        </div>
+        <div class="cfg-row">
+            <div class="cfg-label">バスデータ</div>
+            <div class="cfg-control">
+                <div class="slider-wrap">
+                    <input type="range" id="iv-bus" min="15" max="300" step="15" oninput="syncSlider('iv-bus','iv-bus-val','秒')">
+                    <span class="slider-val" id="iv-bus-val">—秒</span>
+                </div>
+            </div>
+        </div>
+        <div class="cfg-row">
+            <div class="cfg-label">遅延情報</div>
+            <div class="cfg-control">
+                <div class="slider-wrap">
+                    <input type="range" id="iv-delay" min="60" max="3600" step="60" oninput="syncSlider('iv-delay','iv-delay-val','秒')">
+                    <span class="slider-val" id="iv-delay-val">—秒</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="cfg-save-bar">
+            <button class="save-btn" onclick="saveConfig()">保存・即時反映</button>
+            <span id="cfg-msg" style="font-size:0.85rem;min-height:1.2em"></span>
+        </div>
+    </div>
+
     <script>
         const MODE_LABELS = { transit: '電車・バス情報', clock: '大時計' };
 
+        /* ── 認証 ── */
         function getToken() { return localStorage.getItem('admin_token') || ''; }
         function saveToken() {
             localStorage.setItem('admin_token', document.getElementById('token').value);
             showMsg('トークンを保存しました', true);
         }
 
-        function showMsg(text, ok) {
-            const el = document.getElementById('msg');
+        function showMsg(text, ok, id = 'msg') {
+            const el = document.getElementById(id);
             el.textContent = text;
             el.className = ok ? 'ok' : 'err';
-            setTimeout(() => el.textContent = '', 3000);
+            setTimeout(() => el.textContent = '', 4000);
         }
 
-        function updateBadge(mode) {
-            const badge = document.getElementById('badge');
-            badge.className = `badge ${mode}`;
-            badge.innerHTML = `<span class="dot"></span>${MODE_LABELS[mode] ?? mode}`;
-            document.getElementById('btn-transit').className = mode === 'transit' ? 'active-transit' : '';
-            document.getElementById('btn-clock').className   = mode === 'clock'   ? 'active-clock'   : '';
+        /* ── モード ── */
+        function formatTime(iso) {
+            return new Date(iso).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+        }
+
+        function applyStatus(s) {
+            const modeBadge    = document.getElementById('mode-badge');
+            const sourceBadge  = document.getElementById('source-badge');
+            const overrideNote = document.getElementById('override-note');
+            const schedBtn     = document.getElementById('sched-btn');
+            modeBadge.className = `badge ${s.mode}`;
+            modeBadge.innerHTML = `<span class="dot"></span>${MODE_LABELS[s.mode] ?? s.mode}`;
+            document.getElementById('btn-transit').className = s.mode === 'transit' ? 'active-transit' : '';
+            document.getElementById('btn-clock').className   = s.mode === 'clock'   ? 'active-clock' : '';
+            if (s.source === 'manual') {
+                sourceBadge.className = 'badge manual'; sourceBadge.textContent = '手動上書き';
+                overrideNote.style.display = '';
+                document.getElementById('override-until').textContent = formatTime(s.override_until);
+                schedBtn.style.display = '';
+            } else {
+                sourceBadge.className = 'badge schedule'; sourceBadge.textContent = 'スケジュール';
+                overrideNote.style.display = 'none'; schedBtn.style.display = 'none';
+            }
         }
 
         async function switchMode(mode) {
+            const minutes = document.getElementById('override-minutes').value;
             const res = await fetch('/api/mode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-                body: JSON.stringify({ mode })
+                body: JSON.stringify({ mode, override_minutes: parseInt(minutes) })
             });
-            if (res.ok) { updateBadge(mode); showMsg('切り替えました', true); }
+            if (res.ok) { applyStatus(await res.json()); showMsg('切り替えました', true); }
             else showMsg('エラー: トークンを確認してください', false);
         }
 
-        // SSE でリアルタイム更新
-        fetch('/api/mode').then(r=>r.json()).then(d => updateBadge(d.mode));
-        const es = new EventSource('/api/mode/stream');
-        es.onmessage = e => updateBadge(JSON.parse(e.data).mode);
+        async function returnToSchedule() {
+            const res = await fetch('/api/mode/override', {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${getToken()}` }
+            });
+            if (res.ok) { applyStatus(await res.json()); showMsg('スケジュールに戻しました', true); }
+            else showMsg('エラー: トークンを確認してください', false);
+        }
 
-        // スケジュール
+        fetch('/api/mode').then(r => r.json()).then(applyStatus);
+        const es = new EventSource('/api/mode/stream');
+        es.onmessage = e => applyStatus(JSON.parse(e.data));
+
+        /* ── スケジュール ── */
         let scheduleData = { default_mode: 'transit', rules: [] };
 
         async function loadSchedule() {
             const res = await fetch('/api/schedule');
             scheduleData = await res.json();
+            document.getElementById('default-mode').value = scheduleData.default_mode || 'transit';
             renderSchedule();
         }
 
         function renderSchedule() {
             const tbody = document.getElementById('schedule-body');
             tbody.innerHTML = '';
-            const rules = scheduleData.rules || [];
-            rules.sort((a,b) => a.time.localeCompare(b.time));
+            const rules = (scheduleData.rules || []).slice().sort((a, b) => a.time.localeCompare(b.time));
             rules.forEach((r, i) => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td>${r.time}</td><td>${MODE_LABELS[r.mode] ?? r.mode}</td>
                     <td><button class="del-btn" onclick="deleteRule(${i})">削除</button></td>`;
                 tbody.appendChild(tr);
             });
-            if (!rules.length) {
+            if (!rules.length)
                 tbody.innerHTML = `<tr><td colspan="3" style="color:var(--tx-sec);font-size:0.85rem">スケジュールなし</td></tr>`;
-            }
         }
 
         async function saveSchedule() {
+            scheduleData.default_mode = document.getElementById('default-mode').value;
             const res = await fetch('/api/schedule', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
@@ -185,19 +514,228 @@
             if (!time) { showMsg('時刻を入力してください', false); return; }
             scheduleData.rules = scheduleData.rules || [];
             scheduleData.rules.push({ time, mode });
-            renderSchedule();
-            saveSchedule();
+            renderSchedule(); saveSchedule();
         }
 
         function deleteRule(i) {
-            scheduleData.rules.splice(i, 1);
-            renderSchedule();
-            saveSchedule();
+            const sorted = (scheduleData.rules || []).slice().sort((a, b) => a.time.localeCompare(b.time));
+            const target = sorted[i];
+            scheduleData.rules = scheduleData.rules.filter(r => !(r.time === target.time && r.mode === target.mode));
+            renderSchedule(); saveSchedule();
         }
 
-        // 初期化
+        document.getElementById('default-mode').addEventListener('change', saveSchedule);
+
+        /* ── Config form helpers ── */
+        let currentTheme = 'dark';
+        let busStopNumbers = [];
+        let delaySource = 'yahoo';
+
+        function setTheme(btn) {
+            document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTheme = btn.dataset.theme;
+        }
+
+        function setDelaySource(src) {
+            delaySource = src;
+            document.getElementById('src-yahoo').classList.toggle('active', src === 'yahoo');
+            document.getElementById('src-ekispert').classList.toggle('active', src === 'ekispert');
+            document.getElementById('ekispert-warn').style.display = src === 'ekispert' ? '' : 'none';
+        }
+
+        document.getElementById('delay-use-ai').addEventListener('change', function() {
+            document.getElementById('ai-warn').style.display = this.checked ? '' : 'none';
+        });
+
+        function onFeatureChange() {
+            const trains = document.getElementById('feat-trains').checked;
+            const buses  = document.getElementById('feat-buses').checked;
+            const delays = document.getElementById('feat-delays').checked;
+            document.getElementById('trains-section').closest('.card') || document; // no-op
+            setSection('trains-section', trains);
+            setSection('buses-section', buses);
+            setSection('delays-section', delays);
+        }
+
+        function setSection(id, enabled) {
+            const el = document.getElementById(id);
+            if (enabled) el.removeAttribute('style');
+            else el.style.opacity = '0.35';
+        }
+
+        function syncSlider(rangeId, valId, unit) {
+            const v = document.getElementById(rangeId).value;
+            const sec = parseInt(v);
+            let label = `${sec}${unit}`;
+            if (unit === '秒' && sec >= 60 && sec % 60 === 0) label += ` (${sec/60}分)`;
+            document.getElementById(valId).textContent = label;
+        }
+
+        function step(id, delta, min, max) {
+            const el = document.getElementById(id);
+            const v = Math.min(max, Math.max(min, parseInt(el.textContent) + delta));
+            el.textContent = v;
+        }
+
+        function addBusStop() {
+            const input = document.getElementById('bus-stop-new');
+            const num = parseInt(input.value);
+            if (isNaN(num) || num < 1) { return; }
+            if (!busStopNumbers.includes(num)) {
+                busStopNumbers.push(num);
+                busStopNumbers.sort((a, b) => a - b);
+                renderBusChips();
+            }
+            input.value = '';
+        }
+
+        document.getElementById('bus-stop-new').addEventListener('keydown', e => {
+            if (e.key === 'Enter') addBusStop();
+        });
+
+        function removeBusStop(num) {
+            busStopNumbers = busStopNumbers.filter(n => n !== num);
+            renderBusChips();
+        }
+
+        function renderBusChips() {
+            const wrap = document.getElementById('bus-stop-chips');
+            wrap.innerHTML = '';
+            busStopNumbers.forEach(n => {
+                const chip = document.createElement('span');
+                chip.className = 'chip';
+                chip.innerHTML = `${n}番のりば <span class="chip-del" onclick="removeBusStop(${n})">✕</span>`;
+                wrap.appendChild(chip);
+            });
+            if (!busStopNumbers.length) {
+                wrap.innerHTML = `<span style="font-size:0.8rem;color:var(--tx-sec)">のりば未設定</span>`;
+            }
+        }
+
+        /* ── Config load ── */
+        async function loadConfig() {
+            const res = await fetch('/api/config/json');
+            if (!res.ok) { showMsg('config.yml を読み込めませんでした', false, 'cfg-msg'); return; }
+            const c = await res.json();
+
+            currentTheme = c.design?.theme ?? 'dark';
+            document.querySelectorAll('.theme-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.theme === currentTheme);
+            });
+
+            document.getElementById('feat-trains').checked = c.features?.trains ?? true;
+            document.getElementById('feat-buses').checked  = c.features?.buses  ?? true;
+            document.getElementById('feat-delays').checked = c.features?.delays ?? true;
+            onFeatureChange();
+
+            document.getElementById('train-station-id').value = c.trains?.station_id ?? 18;
+            setSlider('train-min-min', c.trains?.min_minutes_until ?? 20, 'train-min-min-val', '分');
+            document.getElementById('train-max-dir').textContent = c.trains?.max_trains_per_direction ?? 6;
+
+            document.getElementById('bus-stop-name').value = c.buses?.stop_name ?? '';
+            busStopNumbers = [...(c.buses?.stop_numbers ?? [])].map(Number).sort((a,b)=>a-b);
+            renderBusChips();
+
+            setDelaySource(c.delays?.source ?? 'yahoo');
+            const useAi = c.delays?.use_ai ?? false;
+            document.getElementById('delay-use-ai').checked = useAi;
+            document.getElementById('ai-warn').style.display = useAi ? '' : 'none';
+
+            setSlider('iv-train', c.intervals?.train_seconds ?? 60, 'iv-train-val', '秒');
+            setSlider('iv-bus',   c.intervals?.bus_seconds   ?? 60, 'iv-bus-val',   '秒');
+            setSlider('iv-delay', c.intervals?.delay_seconds ?? 600,'iv-delay-val', '秒');
+        }
+
+        function setSlider(rangeId, value, valId, unit) {
+            const el = document.getElementById(rangeId);
+            el.value = value;
+            syncSlider(rangeId, valId, unit);
+        }
+
+        /* ── Config save ── */
+        function buildYaml() {
+            const stationId    = parseInt(document.getElementById('train-station-id').value) || 18;
+            const minMin       = parseInt(document.getElementById('train-min-min').value) || 0;
+            const maxDir       = parseInt(document.getElementById('train-max-dir').textContent) || 6;
+            const stopName     = document.getElementById('bus-stop-name').value.trim() || '未設定';
+            const stopNums     = busStopNumbers.length ? busStopNumbers.map(n => `    - ${n}`).join('\n') : '    - 1';
+            const ivTrain      = parseInt(document.getElementById('iv-train').value);
+            const ivBus        = parseInt(document.getElementById('iv-bus').value);
+            const ivDelay      = parseInt(document.getElementById('iv-delay').value);
+            const featTrains   = document.getElementById('feat-trains').checked;
+            const featBuses    = document.getElementById('feat-buses').checked;
+            const featDelays   = document.getElementById('feat-delays').checked;
+            const useAi        = document.getElementById('delay-use-ai').checked;
+
+            return `# ============================================================
+# アプリ設定ファイル
+# ============================================================
+
+design:
+  theme: "${currentTheme}"
+
+features:
+  trains: ${featTrains}
+  buses: ${featBuses}
+  delays: ${featDelays}
+
+trains:
+  station_id: ${stationId}
+  min_minutes_until: ${minMin}
+  max_trains_per_direction: ${maxDir}
+
+buses:
+  stop_name: "${stopName}"
+  stop_numbers:
+${stopNums}
+
+delays:
+  source: "${delaySource}"
+  use_ai: ${useAi}
+
+intervals:
+  train_seconds: ${ivTrain}
+  bus_seconds: ${ivBus}
+  delay_seconds: ${ivDelay}
+`;
+        }
+
+        function validateConfig() {
+            const stationId = parseInt(document.getElementById('train-station-id').value);
+            if (isNaN(stationId) || stationId < 1) return '駅番号を正しく入力してください';
+            if (busStopNumbers.length === 0 && document.getElementById('feat-buses').checked)
+                return 'バス機能が有効ですが、のりば番号が未設定です';
+            const ivTrain = parseInt(document.getElementById('iv-train').value);
+            const ivBus   = parseInt(document.getElementById('iv-bus').value);
+            if (ivTrain < 30 || ivBus < 30)
+                return '更新間隔が短すぎます（API に負荷をかける可能性があります）';
+            return null;
+        }
+
+        async function saveConfig() {
+            const err = validateConfig();
+            if (err) { showMsg(err, false, 'cfg-msg'); return; }
+
+            const yaml = buildYaml();
+            const res = await fetch('/api/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Authorization': `Bearer ${getToken()}` },
+                body: yaml
+            });
+            if (res.ok) {
+                const j = await res.json();
+                showMsg(j.reloaded ? '保存・即時反映しました' : '保存しました（transit 未接続 — 再起動で反映）', j.reloaded, 'cfg-msg');
+            } else {
+                const j = await res.json().catch(() => ({ detail: 'エラー' }));
+                showMsg(j.detail || 'エラー', false, 'cfg-msg');
+            }
+        }
+
+        /* ── 初期化 ── */
         document.getElementById('token').value = getToken();
         loadSchedule();
+        loadConfig();
     </script>
 </body>
 </html>

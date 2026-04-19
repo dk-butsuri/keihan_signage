@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 import httpx
+import yaml
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -16,6 +17,7 @@ CLOCK_URL = os.getenv("CLOCK_URL", "http://clock:80")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "changeme")
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 SCHEDULE_FILE = DATA_DIR / "schedule.json"
+CONFIG_FILE = Path(os.getenv("CONFIG_FILE", "/app/config.yml"))
 
 VALID_MODES = {"transit", "clock"}
 SERVICE_URLS = {"transit": TRANSIT_URL, "clock": CLOCK_URL}
@@ -39,29 +41,46 @@ def save_schedule(data: dict) -> None:
     SCHEDULE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-async def broadcast_mode(mode: str) -> None:
+def _mode_status() -> dict:
+    now = datetime.now()
+    if manual_override_until and now < manual_override_until:
+        return {
+            "mode": current_mode,
+            "source": "manual",
+            "override_until": manual_override_until.isoformat(),
+        }
+    return {"mode": current_mode, "source": "schedule", "override_until": None}
+
+
+async def broadcast_status() -> None:
+    payload = json.dumps(_mode_status())
     for q in subscribers:
-        await q.put(mode)
+        await q.put(payload)
+
+
+async def _apply_schedule() -> None:
+    global current_mode
+    sched = load_schedule()
+    now = datetime.now()
+    now_str = f"{now.hour:02d}:{now.minute:02d}"
+    matched_mode = sched.get("default_mode", "transit")
+    for rule in sorted(sched.get("rules", []), key=lambda r: r["time"]):
+        if rule["time"] <= now_str:
+            matched_mode = rule["mode"]
+    if matched_mode != current_mode:
+        current_mode = matched_mode
+    await broadcast_status()
 
 
 async def schedule_loop() -> None:
-    global current_mode, manual_override_until
+    global manual_override_until
     while True:
         await asyncio.sleep(30)
         try:
             if manual_override_until and datetime.now() < manual_override_until:
                 continue
             manual_override_until = None
-            sched = load_schedule()
-            now = datetime.now()
-            now_str = f"{now.hour:02d}:{now.minute:02d}"
-            matched_mode = sched.get("default_mode", "transit")
-            for rule in sorted(sched.get("rules", []), key=lambda r: r["time"]):
-                if rule["time"] <= now_str:
-                    matched_mode = rule["mode"]
-            if matched_mode != current_mode:
-                current_mode = matched_mode
-                await broadcast_mode(current_mode)
+            await _apply_schedule()
         except Exception:
             pass
 
@@ -86,7 +105,7 @@ async def admin(request: Request):
 
 @app.get("/api/mode")
 async def get_mode():
-    return {"mode": current_mode}
+    return _mode_status()
 
 
 @app.post("/api/mode")
@@ -102,8 +121,19 @@ async def set_mode(request: Request):
     global current_mode, manual_override_until
     current_mode = mode
     manual_override_until = datetime.now() + timedelta(minutes=override_minutes)
-    await broadcast_mode(current_mode)
-    return {"mode": current_mode, "override_until": manual_override_until.isoformat()}
+    await broadcast_status()
+    return _mode_status()
+
+
+@app.delete("/api/mode/override")
+async def clear_override(request: Request):
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {ADMIN_TOKEN}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    global manual_override_until
+    manual_override_until = None
+    await _apply_schedule()
+    return _mode_status()
 
 
 @app.get("/api/mode/stream")
@@ -113,13 +143,13 @@ async def mode_stream(request: Request):
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
-            yield f"data: {json.dumps({'mode': current_mode})}\n\n"
+            yield f"data: {json.dumps(_mode_status())}\n\n"
             while True:
                 if await request.is_disconnected():
                     break
                 try:
-                    mode = await asyncio.wait_for(queue.get(), timeout=25)
-                    yield f"data: {json.dumps({'mode': mode})}\n\n"
+                    payload = await asyncio.wait_for(queue.get(), timeout=25)
+                    yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
@@ -150,6 +180,40 @@ async def put_schedule(request: Request):
     data = await request.json()
     save_schedule(data)
     return data
+
+
+@app.get("/api/config")
+async def get_config():
+    if not CONFIG_FILE.exists():
+        raise HTTPException(status_code=404, detail="config.yml not found")
+    return Response(content=CONFIG_FILE.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+
+
+@app.get("/api/config/json")
+async def get_config_json():
+    if not CONFIG_FILE.exists():
+        raise HTTPException(status_code=404, detail="config.yml not found")
+    return yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8"))
+
+
+@app.put("/api/config")
+async def put_config(request: Request):
+    auth = request.headers.get("Authorization", "")
+    if auth != f"Bearer {ADMIN_TOKEN}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    text = (await request.body()).decode("utf-8")
+    try:
+        yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
+    CONFIG_FILE.write_text(text, encoding="utf-8")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(f"{TRANSIT_URL}/api/config/reload")
+        reloaded = True
+    except Exception:
+        reloaded = False
+    return {"ok": True, "reloaded": reloaded}
 
 
 async def _proxy(target_base: str, path: str, request: Request) -> Response:

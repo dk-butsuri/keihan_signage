@@ -2,39 +2,30 @@
 # アプリ設定ファイル
 # ============================================================
 
-# --- デザイン設定 ---
 design:
-  theme: "dark"   # テーマ: "dark" / "light" / "retro" / "high-contrast" / "keihan-led"
+  theme: "keihan-led"
 
-# --- 機能のオン/オフ ---
 features:
-  trains: true   # 列車情報を表示するか
-  buses: true    # バス情報を表示するか
-  delays: true   # 遅延情報を表示するか
+  trains: true
+  buses: true
+  delays: true
 
-# --- 列車設定 ---
 trains:
-  station_id: 18              # 駅番号（例: 18 = 香里園 KH18）
-  min_minutes_until: 20       # 表示する列車の最低残り時間（分）。これ未満の列車は非表示
-  max_trains_per_direction: 6 # 上り・下りそれぞれ表示する最大列車数
+  station_id: 18
+  min_minutes_until: 20
+  max_trains_per_direction: 6
 
-# --- バス設定 ---
 buses:
-  stop_name: "同志社香里"  # バス停名
-  stop_numbers:            # 取得するのりば番号（複数指定可）
+  stop_name: "同志社香里"
+  stop_numbers:
     - 1
     - 2
 
-# --- 遅延情報設定 ---
-# ※ .env に以下のキーが必要です:
-#   - EKISPERT_API_KEY  : source を "ekispert" にする場合
-#   - GOOGLE_API_KEY    : use_ai を true にする場合（Gemini API）
 delays:
-  source: "yahoo"       # データソース: "yahoo" または "ekispert"
-  use_ai: true          # true: AIで整形する / false: そのまま表示（バイパス）
+  source: "yahoo"
+  use_ai: true
 
-# --- 更新間隔 ---
 intervals:
-  train_seconds: 60    # 列車データの更新間隔（秒）
-  bus_seconds: 60      # バスデータの更新間隔（秒）
-  delay_seconds: 600   # 遅延情報の更新間隔（秒）
+  train_seconds: 60
+  bus_seconds: 60
+  delay_seconds: 600

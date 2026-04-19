@@ -22,36 +22,32 @@ from keihan_tracker.delay_tracker import get_ekispert_delay
 from zoneinfo import ZoneInfo
 JST = ZoneInfo("Asia/Tokyo")
 
-with open("config.yml", encoding="utf-8") as _f:
-    _cfg = yaml.safe_load(_f)
-
-FEATURE_TRAINS  = _cfg["features"]["trains"]
-FEATURE_BUSES   = _cfg["features"]["buses"]
-FEATURE_DELAYS  = _cfg["features"]["delays"]
-
-TRAIN_STATION_ID             = _cfg["trains"]["station_id"]
-TRAIN_MIN_MINUTES            = _cfg["trains"]["min_minutes_until"]
-TRAIN_MAX_PER_DIRECTION      = _cfg["trains"]["max_trains_per_direction"]
-
-BUS_STOP_NAME    = _cfg["buses"]["stop_name"]
-BUS_STOP_NUMBERS = _cfg["buses"]["stop_numbers"]
-
-DELAY_SOURCE = _cfg["delays"]["source"]  # "yahoo" or "ekispert"
-DELAY_USE_AI = _cfg["delays"]["use_ai"]
-
-INTERVAL_TRAIN = _cfg["intervals"]["train_seconds"]
-INTERVAL_BUS   = _cfg["intervals"]["bus_seconds"]
-INTERVAL_DELAY = _cfg["intervals"]["delay_seconds"]
-
-DESIGN_THEME = _cfg["design"]["theme"]
+_cfg: dict = {}
+_tasks: dict[str, asyncio.Task] = {}
+_templates_cache: Optional[Jinja2Templates] = None
+_templates_theme: str = ""
 
 tracker = KHTracker()
 
 latest_bus_data: List['BusInfo'] = []
 latest_delay_data: List['DelayInfo'] = []
 
+
+def _load_config_file() -> dict:
+    with open("config.yml", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def _get_templates() -> Jinja2Templates:
+    global _templates_cache, _templates_theme
+    theme = _cfg["design"]["theme"]
+    if _templates_cache is None or _templates_theme != theme:
+        _templates_cache = Jinja2Templates(directory=f"templates/{theme}")
+        _templates_theme = theme
+    return _templates_cache
+
+
 async def update_train_loop():
-    """Background task to fetch train data every minute."""
     while True:
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching train positions...")
@@ -59,23 +55,18 @@ async def update_train_loop():
             print("Train fetch complete.")
         except Exception as e:
             print(f"Error in train fetch: {e}")
-        await asyncio.sleep(INTERVAL_TRAIN)
+        await asyncio.sleep(_cfg["intervals"]["train_seconds"])
+
 
 async def update_bus_loop():
-    """Background task to fetch bus data every minute."""
     global latest_bus_data
     while True:
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching bus info...")
-            
-            # Logic moved from get_buses
             bus_list = []
-            target_stop = BUS_STOP_NAME
-            stop_nums = BUS_STOP_NUMBERS
-            
-            for num in stop_nums:
+            for num in _cfg["buses"]["stop_numbers"]:
                 try:
-                    res = await get_khbus_info(target_stop, num)
+                    res = await get_khbus_info(_cfg["buses"]["stop_name"], num)
                     if res and res.body and res.body.busstates:
                         for bus in res.body.busstates:
                             prms = bus.busstateprms
@@ -87,99 +78,105 @@ async def update_bus_loop():
                             ))
                 except Exception as e_inner:
                     print(f"Error fetching bus stop {num}: {e_inner}")
-                    pass
 
-            # Sort logic: Keihan Tracker's bus info doesn't provide date, 
-            # so we assume times from 00:00 to 04:00 are NEXT DAY if current time is late night.
-            def parse_time(b: BusInfo):
+            def parse_time(b: 'BusInfo'):
                 import re
                 match = re.search(r'(\d{1,2}):(\d{2})', b.arrival_time)
                 if match:
                     h, m = int(match.group(1)), int(match.group(2))
-                    # If hour is small (0-4), treat it as 24+ for sorting
                     if h < 5:
                         h += 24
                     return h * 60 + m
                 return 9999
 
-            try:
-                bus_list.sort(key=parse_time)
-            except Exception as e:
-                print(f"Error sorting bus list: {e}")
-            
+            bus_list.sort(key=parse_time)
             latest_bus_data = bus_list
             print(f"Bus fetch complete (Count: {len(bus_list)}).")
-            
         except Exception as e:
             print(f"Error in bus fetch: {e}")
-        
-        await asyncio.sleep(INTERVAL_BUS)
+        await asyncio.sleep(_cfg["intervals"]["bus_seconds"])
+
 
 async def update_delay_loop():
-    """Background task to fetch delay info every 2 minutes."""
     global latest_delay_data
     while True:
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching delay info...")
-            results = []
-            if DELAY_SOURCE == "ekispert":
+            if _cfg["delays"]["source"] == "ekispert":
                 delays = await get_ekispert_delay(environ["EKISPERT_API_KEY"])
             else:
                 delays = await get_yahoo_delay()
-            delays = await delay_ai.convert(delays, bypass=not DELAY_USE_AI)
-            for d in delays:
-                results.append(DelayInfo(
+            delays = await delay_ai.convert(delays, bypass=not _cfg["delays"]["use_ai"])
+            latest_delay_data = [
+                DelayInfo(
                     line=d.LineName,
                     status=d.InfoType,
                     detail=d.detail,
                     announced_time=d.AnnouncedTime
-                ))
-            
-            # Keep debug data if user wants (Optional, leaving out for now based on user edit history removing it)
-            # If needed, add critical debug lines here.
-            
-            latest_delay_data = results
-            print(f"Delay fetch complete (Count: {len(results)}).")
+                ) for d in delays
+            ]
+            print(f"Delay fetch complete (Count: {len(latest_delay_data)}).")
         except Exception as e:
             print(f"Error in delay fetch: {e}")
+        await asyncio.sleep(_cfg["intervals"]["delay_seconds"])
 
-        await asyncio.sleep(INTERVAL_DELAY)
+
+async def _reload_config() -> None:
+    global _cfg
+    old_features = dict(_cfg.get("features", {}))
+    _cfg = _load_config_file()
+    new_features = _cfg["features"]
+
+    task_map = {
+        "trains": (update_train_loop, True),
+        "buses":  (update_bus_loop,  False),
+        "delays": (update_delay_loop, False),
+    }
+    for key, (loop_fn, needs_init) in task_map.items():
+        was_on = old_features.get(key, True)
+        is_on  = new_features.get(key, True)
+        if was_on and not is_on:
+            t = _tasks.pop(key, None)
+            if t and not t.done():
+                t.cancel()
+        elif not was_on and is_on:
+            if needs_init:
+                try:
+                    await tracker.fetch_pos()
+                except Exception as e:
+                    print(f"Initial fetch on reload failed: {e}")
+            _tasks[key] = asyncio.create_task(loop_fn())
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Handle startup and shutdown events.
-    Starts background data fetch loops.
-    """
+    global _cfg
+    _cfg = _load_config_file()
     print("Starting up... Initializing background fetchers.")
 
-    tasks = []
-
-    if FEATURE_TRAINS:
+    if _cfg["features"]["trains"]:
         try:
             await tracker.fetch_pos()
         except Exception as e:
             print(f"Initial train fetch failed: {e}")
-        tasks.append(asyncio.create_task(update_train_loop()))
+        _tasks["trains"] = asyncio.create_task(update_train_loop())
 
-    if FEATURE_BUSES:
-        tasks.append(asyncio.create_task(update_bus_loop()))
+    if _cfg["features"]["buses"]:
+        _tasks["buses"] = asyncio.create_task(update_bus_loop())
 
-    if FEATURE_DELAYS:
-        tasks.append(asyncio.create_task(update_delay_loop()))
+    if _cfg["features"]["delays"]:
+        _tasks["delays"] = asyncio.create_task(update_delay_loop())
 
     yield
 
     print("Shutting down...")
-    for t in tasks:
+    for t in _tasks.values():
         t.cancel()
-    try:
-        await asyncio.gather(*tasks, return_exceptions=True)
-    except asyncio.CancelledError:
-        pass
+    await asyncio.gather(*_tasks.values(), return_exceptions=True)
+
 
 app = FastAPI(lifespan=lifespan)
-templates = Jinja2Templates(directory=f"templates/{DESIGN_THEME}")
+
 
 # --- Pydantic Models ---
 
@@ -189,27 +186,28 @@ class TrainInfo(BaseModel):
     time: str
     delay: int
     status: str
-    minutes_until: str = "" # "あとX分"
-    minutes_remaining: Optional[int] = None # For styling logic
+    minutes_until: str = ""
+    minutes_remaining: Optional[int] = None
     is_this_station: bool = False
-    raw_time: Optional[datetime.datetime] = None # For sorting
+    raw_time: Optional[datetime.datetime] = None
 
 class StationResponse(BaseModel):
     station_name: str
-    up_trains: List[TrainInfo]   # Toward Kyoto
-    down_trains: List[TrainInfo] # Toward Osaka
+    up_trains: List[TrainInfo]
+    down_trains: List[TrainInfo]
 
 class BusInfo(BaseModel):
     route_id: str
     destination: str
     status: str
     arrival_time: str
-    
+
 class DelayInfo(BaseModel):
     line: str
     status: str
     detail: str
     announced_time: Optional[datetime.datetime] = None
+
 
 # --- Endpoints ---
 
@@ -219,81 +217,65 @@ async def head_root():
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return _get_templates().TemplateResponse(request, "index.html")
+
+@app.post("/api/config/reload")
+async def config_reload():
+    await _reload_config()
+    return {"ok": True, "theme": _cfg["design"]["theme"]}
 
 @app.get("/api/trains", response_model=StationResponse)
 async def get_trains():
-    """
-    Get train departures for Korien Station (KH18).
-    Includes logic to sort by time and separate by direction.
-    """
     try:
-        # Data is fetched in background, just read the state
-        station = tracker.stations[TRAIN_STATION_ID]
-        
+        station_id = _cfg["trains"]["station_id"]
+        station = tracker.stations[station_id]
         up_trains_list = []
         down_trains_list = []
-        
-        # upcoming_trains contains trains that are scheduled to stop here
         now = datetime.datetime.now(JST)
-        
+        min_minutes = _cfg["trains"]["min_minutes_until"]
+        max_per_dir = _cfg["trains"]["max_trains_per_direction"]
+
         for train, stop_data in station.upcoming_trains:
-            # stop_data.time is likely datetime.datetime
             if not stop_data.time:
                 continue
             departure_time = stop_data.time
-            time_str = "--:--"
-            minutes_str = ""
-            minutes_val = None
             effective_delay = train.delay_minutes
-
-            time_str = departure_time.strftime("%H:%M")
-            
-            # Calculate expected arrival (Scheduled + Delay)
             expected_time = departure_time + datetime.timedelta(minutes=effective_delay)
-            
-            # Calculate diff from NOW to EXPECTED
             diff = expected_time - now
             minutes_val = int(diff.total_seconds() / 60)
-            
-            if minutes_val >= 0:
-                minutes_str = f"あと{minutes_val}分"
-            else:
-                minutes_str = "まもなく" 
+            minutes_str = f"あと{minutes_val}分" if minutes_val >= 0 else "まもなく"
 
-            # Simple status logic
             status_text = ""
             if effective_delay > 0:
                 status_text = f"遅れ約{effective_delay}分"
             elif isinstance(train, ActiveTrainData):
                 if train.is_stopping and train.next_stop_station == station:
-                     status_text = "当駅停車中"
-            
+                    status_text = "当駅停車中"
+
             info = TrainInfo(
                 kind=train.train_type.value,
                 destination=train.destination.station_name.ja,
-                time=time_str,
+                time=departure_time.strftime("%H:%M"),
                 delay=effective_delay,
                 status=status_text,
                 minutes_until=minutes_str,
                 minutes_remaining=minutes_val,
                 raw_time=departure_time
             )
-            if minutes_val < TRAIN_MIN_MINUTES:
+            if minutes_val < min_minutes:
                 continue
-            if train.direction == "up": # Kyoto
+            if train.direction == "up":
                 up_trains_list.append(info)
-            else: # down (Osaka)
+            else:
                 down_trains_list.append(info)
-                
-        # Sort by raw_time (datetime)
+
         up_trains_list.sort(key=lambda x: x.raw_time if x.raw_time else datetime.datetime.max.replace(tzinfo=JST))
         down_trains_list.sort(key=lambda x: x.raw_time if x.raw_time else datetime.datetime.max.replace(tzinfo=JST))
 
         return StationResponse(
             station_name=station.station_name.ja,
-            up_trains=up_trains_list[:TRAIN_MAX_PER_DIRECTION],
-            down_trains=down_trains_list[:TRAIN_MAX_PER_DIRECTION]
+            up_trains=up_trains_list[:max_per_dir],
+            down_trains=down_trains_list[:max_per_dir]
         )
     except Exception as e:
         print(f"Error in /api/trains: {e}")
@@ -301,16 +283,10 @@ async def get_trains():
 
 @app.get("/api/buses", response_model=List[BusInfo])
 async def get_buses():
-    """
-    Get cached bus info.
-    """
     return latest_bus_data
 
 @app.get("/api/delays", response_model=List[DelayInfo])
 async def get_delays():
-    """
-    Get cached delay info.
-    """
     return latest_delay_data
 
 if __name__ == "__main__":
