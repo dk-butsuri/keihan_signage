@@ -292,7 +292,9 @@ async def get_delays():
 
 @app.get("/api/time")
 async def get_time():
-    return await asyncio.to_thread(get_ntp_time)
+    from fastapi.responses import JSONResponse
+    data = await asyncio.to_thread(get_ntp_time)
+    return JSONResponse(content=data, headers={"Cache-Control": "no-store"})
 
 if __name__ == "__main__":
     import uvicorn

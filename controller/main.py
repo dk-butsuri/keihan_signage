@@ -164,7 +164,10 @@ async def mode_stream(request: Request):
 
 @app.get("/api/time")
 async def get_time():
-    return await asyncio.to_thread(get_ntp_time)
+    from fastapi.responses import JSONResponse
+    data = await asyncio.to_thread(get_ntp_time)
+    return JSONResponse(content=data, headers={"Cache-Control": "no-store"})
+
 
 
 @app.get("/api/schedule")
