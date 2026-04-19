@@ -4,3 +4,4 @@ jinja2
 uvicorn
 python-dotenv
 google-genai
+pyyaml

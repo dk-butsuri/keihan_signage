@@ -11,18 +11,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-base:    #07101F;
-            --bg-surface: #0C1828;
-            --bg-raised:  #102035;
-            --bd-sub:     #172C44;
-            --bd-mid:     #1F3D5A;
-            --tx-pri:     #D8E8F8;
-            --tx-sec:     #5A7A96;
-            --tx-dim:     #253B52;
-            --green:      #00C876;
-            --red:        #FF3045;
-            --amber:      #FFB020;
-            --blue:       #4A9EFF;
+            --bg-base:    #020509;
+            --bg-surface: #040B18;
+            --bg-raised:  #061120;
+            --bd-sub:     #082040;
+            --bd-mid:     #0D3060;
+            --tx-pri:     #FFFFFF;
+            --tx-sec:     #99BBDD;
+            --tx-dim:     #2A4A6A;
+            --green:      #00E870;
+            --red:        #FF2233;
+            --amber:      #FFA000;
+            --blue:       #3A7FFF;
         }
 
         *, *::before, *::after { box-sizing: border-box; }
@@ -45,13 +45,13 @@
         .panel {
             background: var(--bg-surface);
             border: 1px solid var(--bd-sub);
-            border-radius: 3px;
+            border-radius: 0;
         }
 
         /* Minimal 2px scrollbar */
         .scr::-webkit-scrollbar       { width: 2px; }
         .scr::-webkit-scrollbar-track { background: transparent; }
-        .scr::-webkit-scrollbar-thumb { background: var(--bd-mid); border-radius: 2px; }
+        .scr::-webkit-scrollbar-thumb { background: var(--bd-mid); border-radius: 0; }
 
         /* Section label chip */
         .chip {
@@ -61,7 +61,18 @@
             letter-spacing: 0.2em;
             text-transform: uppercase;
             padding: 0.25vh 0.6vw;
-            border-radius: 2px;
+            border-radius: 0;
+        }
+
+        /* LED stripe effect for direction headers */
+        .led-stripe {
+            background-image: repeating-linear-gradient(
+                0deg,
+                #0050b3,
+                #0050b3 2px,
+                #001796 3px,
+                #001796 13px
+            );
         }
 
         /* Train row hover */
@@ -93,7 +104,7 @@
 <body>
 
     <!-- ─── Header ─── -->
-    <header class="panel" style="height:10vh; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 2vw;">
+    <header class="panel" style="height:10vh; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 2vw; border-top:4px solid #1A6ECC;">
         <div>
             <div class="font-syne" style="font-size:0.65vw; font-weight:700; letter-spacing:0.35em; text-transform:uppercase; color:var(--tx-sec); margin-bottom:0.5vh;">
                 同志社香里 ／ Transit Information
@@ -112,10 +123,10 @@
     <main style="flex:1; display:flex; gap:1.5vw; overflow:hidden; min-height:0;">
 
         <!-- Trains (2/3) -->
-        <section id="train-section" class="panel" style="width:66.666%; display:flex; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out;">
+        <section id="train-section" class="panel" style="width:66.666%; display:flex; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out; border-top:4px solid #1A6ECC;">
 
-            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
-                <span class="chip" style="background:rgba(74,158,255,0.12); color:var(--blue); border:1px solid rgba(74,158,255,0.3);">TRAIN</span>
+            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:#050F28; border-bottom:1px solid var(--bd-sub);">
+                <span class="chip" style="background:rgba(58,127,255,0.2); color:var(--blue); border:1px solid rgba(58,127,255,0.4);">TRAIN</span>
                 <span style="font-size:1.3vw; font-weight:700;">京阪電車 香里園駅</span>
             </div>
 
@@ -123,14 +134,14 @@
 
                 <!-- Kyoto -->
                 <div style="width:50%; display:flex; flex-direction:column; border-right:1px solid var(--bd-sub);">
-                    <div style="flex-shrink:0; text-align:center; padding:0.6vh 0; border-bottom:1px solid var(--bd-sub); background:rgba(74,158,255,0.05);">
-                        <span style="font-size:1.1vw; font-weight:700;">京都方面</span>
-                        <span style="font-size:0.85vw; color:var(--tx-sec); margin-left:0.5vw;">三条・出町柳</span>
+                    <div class="led-stripe" style="flex-shrink:0; text-align:center; padding:0.6vh 0; border-bottom:1px solid #0A3060;">
+                        <span style="font-size:1.1vw; font-weight:700; text-shadow:0 0 8px rgba(58,127,255,0.6);">京都方面</span>
+                        <span style="font-size:0.85vw; color:#99BBDD; margin-left:0.5vw;">三条・出町柳</span>
                     </div>
                     <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
                         <table style="width:100%; table-layout:fixed; flex-shrink:0;">
                             <thead>
-                                <tr style="background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
+                                <tr style="background:#061120; border-bottom:1px solid var(--bd-sub);">
                                     <th class="chip" style="width:25%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">種別</th>
                                     <th class="chip" style="width:28%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">時刻</th>
                                     <th class="chip" style="width:47%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">行先・状況</th>
@@ -150,14 +161,14 @@
 
                 <!-- Osaka -->
                 <div style="width:50%; display:flex; flex-direction:column;">
-                    <div style="flex-shrink:0; text-align:center; padding:0.6vh 0; border-bottom:1px solid var(--bd-sub); background:rgba(74,158,255,0.05);">
-                        <span style="font-size:1.1vw; font-weight:700;">大阪方面</span>
-                        <span style="font-size:0.85vw; color:var(--tx-sec); margin-left:0.5vw;">淀屋橋・中之島</span>
+                    <div class="led-stripe" style="flex-shrink:0; text-align:center; padding:0.6vh 0; border-bottom:1px solid #0A3060;">
+                        <span style="font-size:1.1vw; font-weight:700; text-shadow:0 0 8px rgba(58,127,255,0.6);">大阪方面</span>
+                        <span style="font-size:0.85vw; color:#99BBDD; margin-left:0.5vw;">淀屋橋・中之島</span>
                     </div>
                     <div style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
                         <table style="width:100%; table-layout:fixed; flex-shrink:0;">
                             <thead>
-                                <tr style="background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
+                                <tr style="background:#061120; border-bottom:1px solid var(--bd-sub);">
                                     <th class="chip" style="width:25%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">種別</th>
                                     <th class="chip" style="width:28%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">時刻</th>
                                     <th class="chip" style="width:47%; text-align:center; padding:0.8vh 0.5vw; color:var(--tx-dim); font-size:0.72vw;">行先・状況</th>
@@ -180,17 +191,17 @@
 
         <!-- Buses (1/3) -->
         <section id="bus-section" class="panel" style="width:33.333%; display:flex; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out;">
-            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
-                <span class="chip" style="background:rgba(255,176,32,0.12); color:var(--amber); border:1px solid rgba(255,176,32,0.3);">BUS</span>
+            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:#050F28; border-bottom:1px solid var(--bd-sub);">
+                <span class="chip" style="background:rgba(255,160,0,0.12); color:var(--amber); border:1px solid rgba(255,160,0,0.3);">BUS</span>
                 <span style="font-size:1.3vw; font-weight:700;">京阪バス</span>
             </div>
             <div id="bus-container" class="scr" style="flex:1; overflow-y:auto; padding:0.8vw; display:flex; flex-direction:column; gap:1vh;"></div>
         </section>
 
         <!-- Delay Sidebar (hidden by default) -->
-        <section id="delay-sidebar" class="panel" style="display:none; width:0; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out; border-color:rgba(255,48,69,0.35);">
-            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:rgba(255,48,69,0.07); border-bottom:1px solid rgba(255,48,69,0.25);">
-                <span class="chip" style="background:rgba(255,48,69,0.15); color:var(--red); border:1px solid rgba(255,48,69,0.35);">INFO</span>
+        <section id="delay-sidebar" class="panel" style="display:none; width:0; flex-direction:column; overflow:hidden; transition:width 0.5s ease-in-out; border-color:rgba(255,34,51,0.35);">
+            <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:rgba(255,34,51,0.07); border-bottom:1px solid rgba(255,34,51,0.25);">
+                <span class="chip" style="background:rgba(255,34,51,0.15); color:var(--red); border:1px solid rgba(255,34,51,0.35);">INFO</span>
                 <span style="font-size:1.3vw; font-weight:700;">運行情報</span>
             </div>
             <div id="delay-sidebar-content" class="scr" style="flex:1; overflow-y:auto; padding:0.8vw; display:flex; flex-direction:column; gap:1vh;"></div>
@@ -200,7 +211,7 @@
 
     <!-- ─── Footer ─── -->
     <footer id="footer-section" class="panel" style="flex-shrink:0; min-height:12vh; max-height:25vh; display:flex; overflow:hidden; transition:all 0.5s ease-in-out;">
-        <div style="flex-shrink:0; width:9vw; display:flex; align-items:center; justify-content:center; background:rgba(255,48,69,0.07); border-right:1px solid rgba(255,48,69,0.2);">
+        <div style="flex-shrink:0; width:9vw; display:flex; align-items:center; justify-content:center; background:rgba(255,34,51,0.07); border-right:1px solid rgba(255,34,51,0.2);">
             <span class="writing-v font-syne" style="font-size:1.5vw; font-weight:700; color:var(--red); letter-spacing:0.25em; padding: 1.5vh 0;">運行情報</span>
         </div>
         <div class="scr" style="flex:1; overflow-y:auto; padding:0 1vw; background:var(--bg-surface);">
@@ -337,7 +348,7 @@
                     ? `<span class="pulse" style="color:var(--red); font-weight:700; font-size:0.95vw; display:block; margin-top:0.2vh;">遅れ${t.delay}分</span>`
                     : '';
                 const statusDisplay = t.status
-                    ? `<span style="background:rgba(255,176,32,0.15); color:var(--amber); padding:0.1vh 0.5vw; border-radius:2px; font-size:0.95vw; border:1px solid rgba(255,176,32,0.25); display:inline-block; margin-top:0.3vh;">${t.status}</span>`
+                    ? `<span style="background:rgba(255,160,0,0.15); color:var(--amber); padding:0.1vh 0.5vw; border-radius:0; font-size:0.95vw; border:1px solid rgba(255,160,0,0.25); display:inline-block; margin-top:0.3vh;">${t.status}</span>`
                     : delayText;
 
                 let minsDisplay = '';
@@ -356,7 +367,7 @@
                 tbody.insertAdjacentHTML('beforeend', `
                     <tr style="background:${rowBg}; border-bottom:1px solid var(--bd-sub);">
                         <td style="padding:1.4vh 0.5vw; width:25%; text-align:center; vertical-align:middle;">
-                            <div style="${trainStyle} padding:0.25vh 0.3vw; border-radius:2px; font-weight:700; text-align:center; font-size:1.2vw; line-height:1.3; min-height:2.4em; display:flex; align-items:center; justify-content:center;">
+                            <div style="${trainStyle} padding:0.25vh 0.3vw; border-radius:0; font-weight:700; text-align:center; font-size:1.2vw; line-height:1.3; min-height:2.4em; display:flex; align-items:center; justify-content:center;">
                                 ${t.kind}
                             </div>
                         </td>
@@ -385,13 +396,13 @@
             }
             busList.forEach(b => {
                 container.insertAdjacentHTML('beforeend', `
-                    <div style="background:var(--bg-raised); border:1px solid var(--bd-mid); border-top:2px solid var(--amber); border-radius:2px; padding:0.8vw; display:flex; flex-direction:column; gap:0.5vh;">
+                    <div style="background:var(--bg-raised); border:1px solid var(--bd-mid); border-top:2px solid var(--amber); border-radius:0; padding:0.8vw; display:flex; flex-direction:column; gap:0.5vh;">
                         <div style="font-weight:700; font-size:1.5vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-bottom:0.3vh; border-bottom:1px solid var(--bd-sub);">
                             ${b.destination}
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div style="font-family:'JetBrains Mono',monospace; color:var(--tx-sec); font-size:1.15vw; overflow:hidden; text-overflow:ellipsis;">${b.arrival_time}</div>
-                            <div style="font-family:'JetBrains Mono',monospace; color:var(--amber); font-weight:700; font-size:1.15vw; background:rgba(255,176,32,0.08); padding:0.1vh 0.6vw; border-radius:2px; border:1px solid rgba(255,176,32,0.2); white-space:nowrap; margin-left:0.5vw;">
+                            <div style="font-family:'JetBrains Mono',monospace; color:var(--amber); font-weight:700; font-size:1.15vw; background:rgba(255,160,0,0.08); padding:0.1vh 0.6vw; border-radius:0; border:1px solid rgba(255,160,0,0.2); white-space:nowrap; margin-left:0.5vw;">
                                 ${b.status}
                             </div>
                         </div>
@@ -438,13 +449,13 @@
                     const ago = minutesAgo(d.announced_time);
                     const agoHtml = ago ? `<span style="color:var(--tx-dim); font-size:0.78vw; margin-left:auto; white-space:nowrap;">${ago}に発表</span>` : '';
                     sidebarContainer.insertAdjacentHTML('beforeend', `
-                        <div style="background:rgba(255,48,69,0.05); border:1px solid rgba(255,48,69,0.18); border-radius:2px; padding:0.6vw; display:flex; flex-direction:column; gap:0.5vh;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:0.4vh; border-bottom:1px solid rgba(255,48,69,0.12);">
-                                <span style="background:var(--red); color:#fff; font-weight:700; padding:0.1vh 0.6vw; font-size:0.88vw; border-radius:2px;">${d.line}</span>
+                        <div style="background:rgba(255,34,51,0.05); border:1px solid rgba(255,34,51,0.18); border-radius:0; padding:0.6vw; display:flex; flex-direction:column; gap:0.5vh;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:0.4vh; border-bottom:1px solid rgba(255,34,51,0.12);">
+                                <span style="background:var(--red); color:#fff; font-weight:700; padding:0.1vh 0.6vw; font-size:0.88vw; border-radius:0;">${d.line}</span>
                                 <span style="color:var(--amber); font-weight:700; font-size:1vw; overflow:hidden; text-overflow:ellipsis; margin-left:0.5vw;">${d.status}</span>
                                 ${agoHtml}
                             </div>
-                            <div style="overflow:hidden; position:relative; height:1.6em; background:rgba(0,0,0,0.1); border-radius:1px; padding:0 0.2vw;">
+                            <div style="overflow:hidden; position:relative; height:1.6em; background:rgba(0,0,0,0.2); border-radius:0; padding:0 0.2vw;">
                                 <div class="marquee" style="color:var(--tx-sec); font-size:0.92vw; line-height:1.6em; animation-duration:${duration}s;">${d.detail}</div>
                             </div>
                         </div>
@@ -475,7 +486,7 @@
                     footerContainer.insertAdjacentHTML('beforeend', `
                         <div style="display:flex; flex-direction:column; border-bottom:1px solid var(--bd-sub); padding:1.2vh 0;">
                             <div style="display:flex; align-items:center; margin-bottom:0.4vh; gap:0.8vw;">
-                                <span style="background:var(--red); color:#fff; font-weight:700; padding:0.2vh 0.8vw; font-size:0.95vw; border-radius:2px; flex-shrink:0;">${d.line}</span>
+                                <span style="background:var(--red); color:#fff; font-weight:700; padding:0.2vh 0.8vw; font-size:0.95vw; border-radius:0; flex-shrink:0;">${d.line}</span>
                                 <span style="color:var(--amber); font-weight:700; font-size:1.4vw; flex-shrink:0;">${d.status}</span>
                             </div>
                             <div style="display:flex; align-items:baseline; gap:0.8vw; padding-left:0.5vw;">

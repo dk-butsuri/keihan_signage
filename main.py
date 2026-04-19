@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import datetime
 import asyncio
+import yaml
 from keihan_tracker import KHTracker
 from keihan_tracker.keihan_train.schemes import TrainType
 from keihan_tracker.keihan_train.tracker import ActiveTrainData
@@ -18,8 +19,31 @@ from keihan_tracker.bus.tracker import get_khbus_info
 from keihan_tracker.delay_tracker import get_yahoo_delay
 from keihan_tracker.delay_tracker import get_ekispert_delay
 
-from zoneinfo import ZoneInfo  # 追加
+from zoneinfo import ZoneInfo
 JST = ZoneInfo("Asia/Tokyo")
+
+with open("config.yml", encoding="utf-8") as _f:
+    _cfg = yaml.safe_load(_f)
+
+FEATURE_TRAINS  = _cfg["features"]["trains"]
+FEATURE_BUSES   = _cfg["features"]["buses"]
+FEATURE_DELAYS  = _cfg["features"]["delays"]
+
+TRAIN_STATION_ID             = _cfg["trains"]["station_id"]
+TRAIN_MIN_MINUTES            = _cfg["trains"]["min_minutes_until"]
+TRAIN_MAX_PER_DIRECTION      = _cfg["trains"]["max_trains_per_direction"]
+
+BUS_STOP_NAME    = _cfg["buses"]["stop_name"]
+BUS_STOP_NUMBERS = _cfg["buses"]["stop_numbers"]
+
+DELAY_SOURCE = _cfg["delays"]["source"]  # "yahoo" or "ekispert"
+DELAY_USE_AI = _cfg["delays"]["use_ai"]
+
+INTERVAL_TRAIN = _cfg["intervals"]["train_seconds"]
+INTERVAL_BUS   = _cfg["intervals"]["bus_seconds"]
+INTERVAL_DELAY = _cfg["intervals"]["delay_seconds"]
+
+DESIGN_THEME = _cfg["design"]["theme"]
 
 tracker = KHTracker()
 
@@ -35,7 +59,7 @@ async def update_train_loop():
             print("Train fetch complete.")
         except Exception as e:
             print(f"Error in train fetch: {e}")
-        await asyncio.sleep(60)
+        await asyncio.sleep(INTERVAL_TRAIN)
 
 async def update_bus_loop():
     """Background task to fetch bus data every minute."""
@@ -46,8 +70,8 @@ async def update_bus_loop():
             
             # Logic moved from get_buses
             bus_list = []
-            target_stop = "同志社香里"
-            stop_nums = [1, 2] # Both directions
+            target_stop = BUS_STOP_NAME
+            stop_nums = BUS_STOP_NUMBERS
             
             for num in stop_nums:
                 try:
@@ -89,7 +113,7 @@ async def update_bus_loop():
         except Exception as e:
             print(f"Error in bus fetch: {e}")
         
-        await asyncio.sleep(60)
+        await asyncio.sleep(INTERVAL_BUS)
 
 async def update_delay_loop():
     """Background task to fetch delay info every 2 minutes."""
@@ -98,9 +122,11 @@ async def update_delay_loop():
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching delay info...")
             results = []
-            #delays = await get_ekispert_delay(environ["EKISPERT_API_KEY"])
-            delays = await get_yahoo_delay()
-            delays = await delay_ai.convert(delays,bypass=False)
+            if DELAY_SOURCE == "ekispert":
+                delays = await get_ekispert_delay(environ["EKISPERT_API_KEY"])
+            else:
+                delays = await get_yahoo_delay()
+            delays = await delay_ai.convert(delays, bypass=not DELAY_USE_AI)
             for d in delays:
                 results.append(DelayInfo(
                     line=d.LineName,
@@ -117,7 +143,7 @@ async def update_delay_loop():
         except Exception as e:
             print(f"Error in delay fetch: {e}")
 
-        await asyncio.sleep(600)
+        await asyncio.sleep(INTERVAL_DELAY)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -127,31 +153,33 @@ async def lifespan(app: FastAPI):
     """
     print("Starting up... Initializing background fetchers.")
 
-    # Initial fetches for immediate availability
-    try:
-        await tracker.fetch_pos()
-    except Exception as e:
-        print(f"Initial train fetch failed: {e}")
-        
-    task_train = asyncio.create_task(update_train_loop())
-    task_bus = asyncio.create_task(update_bus_loop())
-    task_delay = asyncio.create_task(update_delay_loop())
-    
+    tasks = []
+
+    if FEATURE_TRAINS:
+        try:
+            await tracker.fetch_pos()
+        except Exception as e:
+            print(f"Initial train fetch failed: {e}")
+        tasks.append(asyncio.create_task(update_train_loop()))
+
+    if FEATURE_BUSES:
+        tasks.append(asyncio.create_task(update_bus_loop()))
+
+    if FEATURE_DELAYS:
+        tasks.append(asyncio.create_task(update_delay_loop()))
+
     yield
-    
+
     print("Shutting down...")
-    task_train.cancel()
-    task_bus.cancel()
-    task_delay.cancel()
-    
+    for t in tasks:
+        t.cancel()
     try:
-        # Await all
-        await asyncio.gather(task_train, task_bus, task_delay, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
     except asyncio.CancelledError:
         pass
 
 app = FastAPI(lifespan=lifespan)
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=f"templates/{DESIGN_THEME}")
 
 # --- Pydantic Models ---
 
@@ -197,7 +225,7 @@ async def get_trains():
     """
     try:
         # Data is fetched in background, just read the state
-        station = tracker.stations[18] # KH18: Korien
+        station = tracker.stations[TRAIN_STATION_ID]
         
         up_trains_list = []
         down_trains_list = []
@@ -247,7 +275,7 @@ async def get_trains():
                 minutes_remaining=minutes_val,
                 raw_time=departure_time
             )
-            if minutes_val < 20:
+            if minutes_val < TRAIN_MIN_MINUTES:
                 continue
             if train.direction == "up": # Kyoto
                 up_trains_list.append(info)
@@ -260,8 +288,8 @@ async def get_trains():
 
         return StationResponse(
             station_name=station.station_name.ja,
-            up_trains=up_trains_list[:6], # Show top 6
-            down_trains=down_trains_list[:6]
+            up_trains=up_trains_list[:TRAIN_MAX_PER_DIRECTION],
+            down_trains=down_trains_list[:TRAIN_MAX_PER_DIRECTION]
         )
     except Exception as e:
         print(f"Error in /api/trains: {e}")
