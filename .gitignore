@@ -21,3 +21,4 @@ tracker_info.txt
 
 # Docker
 *.log
+docker-compose.override.yml
