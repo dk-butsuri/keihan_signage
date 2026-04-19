@@ -175,6 +175,7 @@ async def proxy_transit(path: str, request: Request):
 
 
 @app.api_route("/transit", methods=["GET", "HEAD", "POST"])
+@app.api_route("/transit/", methods=["GET", "HEAD", "POST"])
 async def proxy_transit_root(request: Request):
     return await _proxy(TRANSIT_URL, "", request)
 
@@ -185,5 +186,6 @@ async def proxy_clock(path: str, request: Request):
 
 
 @app.api_route("/clock", methods=["GET", "HEAD", "POST"])
+@app.api_route("/clock/", methods=["GET", "HEAD", "POST"])
 async def proxy_clock_root(request: Request):
     return await _proxy(CLOCK_URL, "", request)
