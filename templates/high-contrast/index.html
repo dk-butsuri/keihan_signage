@@ -295,7 +295,7 @@
         // --- Fetch ---
         async function fetchTrains() {
             try {
-                const res  = await fetch('/api/trains');
+                const res  = await fetch('api/trains');
                 const data = await res.json();
                 renderTrains('trains-up-body',   data.up_trains);
                 renderTrains('trains-down-body', data.down_trains);
@@ -305,7 +305,7 @@
 
         async function fetchBuses() {
             try {
-                const res  = await fetch('/api/buses');
+                const res  = await fetch('api/buses');
                 const data = await res.json();
                 scrollers.bus.reset();
                 renderBuses(data);
@@ -316,7 +316,7 @@
 
         async function fetchDelays() {
             try {
-                const res  = await fetch('/api/delays');
+                const res  = await fetch('api/delays');
                 const data = await res.json();
                 renderDelays(data);
             } catch (e) { console.error("Delay Fetch Error", e); }
