@@ -501,18 +501,43 @@
         }
 
         // --- Clock ---
-        function updateClock() {
-            const now  = new Date();
+        var _clockOffset = 0;
+        function _clockTick() {
+            const now  = new Date(Date.now() + _clockOffset);
             const days = ['日','月','火','水','木','金','土'];
             document.getElementById('clock-date').innerText =
                 `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} (${days[now.getDay()]})`;
             document.getElementById('clock-time').innerText =
                 `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
         }
+        function _clockSchedule() {
+            var delay = 1000 - ((Date.now() + _clockOffset) % 1000);
+            setTimeout(function() { _clockTick(); _clockSchedule(); }, delay);
+        }
+        function _clockSampleOnce() {
+            var t0 = performance.now();
+            return fetch('api/time')
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    var t1 = performance.now();
+                    var httpRtt = t1 - t0;
+                    return { estimated: data.ts * 1000 + httpRtt / 2, errorBound: (httpRtt + data.ntp_rtt_ms) / 2 };
+                });
+        }
+        function _clockSync() {
+            var promises = [];
+            for (var i = 0; i < 5; i++) promises.push(_clockSampleOnce());
+            Promise.all(promises).then(function(samples) {
+                var best = samples.reduce(function(a, b) { return a.errorBound < b.errorBound ? a : b; });
+                _clockOffset = best.estimated - Date.now();
+            }).catch(function(e) { console.warn('[clock] sync failed:', e); });
+        }
 
         // --- Init ---
-        setInterval(updateClock, 1000);
-        updateClock();
+        _clockSync();
+        setInterval(_clockSync, 5 * 60 * 1000);
+        _clockTick();
+        _clockSchedule();
         fetchTrains();
         fetchBuses();
         fetchDelays();

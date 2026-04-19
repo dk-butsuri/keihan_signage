@@ -8,6 +8,7 @@ from typing import List, Optional
 import datetime
 import asyncio
 import yaml
+from time_sync import get_ntp_time
 from keihan_tracker import KHTracker
 from keihan_tracker.keihan_train.schemes import TrainType
 from keihan_tracker.keihan_train.tracker import ActiveTrainData
@@ -288,6 +289,10 @@ async def get_buses():
 @app.get("/api/delays", response_model=List[DelayInfo])
 async def get_delays():
     return latest_delay_data
+
+@app.get("/api/time")
+async def get_time():
+    return await asyncio.to_thread(get_ntp_time)
 
 if __name__ == "__main__":
     import uvicorn
