@@ -1,28 +1,38 @@
-# 香里園 交通情報ダッシュボード
+# 香里園 サイネージシステム
 
-香里園駅（KH18）および同志社香里バス停の発着情報と、近鉄・京阪の遅延情報をリアルタイムで表示するWebアプリです。
+香里園駅周辺の交通情報（列車・バス・遅延）と時計を切り替えて表示するデジタルサイネージです。
 
-## 機能
+## 構成
 
-- **列車情報**: 香里園駅の上り（京都方面）・下り（大阪方面）の発車時刻・遅延状況
-- **バス情報**: 同志社香里バス停（1番・2番乗り場）の時刻・行先
-- **遅延情報**: バスすぱあと、またはYahoo!鉄道情報からの遅延情報を取得し Gemini AI で自動分類（運転見合わせ / 列車遅延 / ダイヤ乱れ など）
+```
+controller  ─── サイネージ全体を制御（モード管理・スケジュール・SSE配信）
+transit     ─── 交通情報表示（列車・バス・遅延）
+clock       ─── 時計表示
+```
+
+### モード
+
+| モード | 内容 |
+|--------|------|
+| `transit` | 香里園駅の列車・バス・遅延情報をリアルタイム表示 |
+| `clock` | 時計を表示 |
+
+モードの切替は SSE（Server-Sent Events）でクライアントにリアルタイム配信されます。
 
 ## 技術スタック
 
 | 項目 | 内容 |
 |------|------|
-| バックエンド | FastAPI + Uvicorn |
+| controller | FastAPI + Uvicorn |
+| transit | FastAPI + Uvicorn |
+| clock | 静的 HTML |
 | データ取得 | [keihan_tracker](https://github.com/dk-butsuri/keihan_tracker) |
-| AI分類 | Google Gemini API (`gemini-3.1-flash-lite-preview`) |
-| テンプレート | Jinja2 |
+| AI分類 | Google Gemini API |
 | コンテナ | Docker / Docker Compose |
 
 ## セットアップ
 
 ### 1. 環境変数の設定
-
-`.env.example` をコピーして `.env` を作成し、APIキーを設定します。
 
 ```bash
 cp .env.example .env
@@ -34,36 +44,67 @@ cp .env.example .env
 GOOGLE_API_KEY=your_google_api_key_here
 ```
 
-> Google APIキーは [Google AI Studio](https://aistudio.google.com/) で取得できます。
-
-### 2. Docker で起動（推奨）
+### 2. 起動
 
 ```bash
 docker compose up -d
 ```
 
-ブラウザで `http://localhost:8000` にアクセスします。
+ブラウザで `http://localhost:8880` にアクセスします。
 
-### 3. ローカルで起動
-
-```bash
-pip install -r requirements.txt
-python main.py
-```
-
-## API エンドポイント
+## エンドポイント（controller）
 
 | エンドポイント | 説明 |
 |----------------|------|
-| `GET /` | ダッシュボード画面 |
-| `GET /api/trains` | 香里園駅の列車情報 |
-| `GET /api/buses` | 同志社香里バス停の情報 |
-| `GET /api/delays` | 遅延情報（AI分類済み） |
+| `GET /` | サイネージ表示画面 |
+| `GET /admin` | 管理画面 |
+| `GET /api/mode` | 現在のモードを取得 |
+| `POST /api/mode` | モードを手動変更（要 Bearer トークン） |
+| `GET /api/mode/stream` | モード変更を SSE でストリーミング |
+| `GET /api/schedule` | スケジュール取得 |
+| `PUT /api/schedule` | スケジュール更新（要 Bearer トークン） |
+| `GET /api/time` | NTP 時刻取得 |
+| `GET /transit/...` | transit サービスへのプロキシ |
+| `GET /clock/...` | clock サービスへのプロキシ |
 
-## データ更新間隔
+### 手動モード変更
 
-| データ | 間隔 |
-|--------|------|
-| 列車位置情報 | 60秒ごと |
-| バス情報 | 60秒ごと |
-| 遅延情報 | 10分ごと |
+```bash
+curl -X POST http://localhost:8880/api/mode \
+  -H "Authorization: Bearer changeme" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "clock", "override_minutes": 60}'
+```
+
+`override_minutes`（デフォルト: 60）の間、スケジュールによる自動切替を抑制します。
+
+## スケジュール設定
+
+`controller_data/schedule.json` で時刻ごとのモードを設定します。
+
+```json
+{
+  "default_mode": "transit",
+  "rules": [
+    {"time": "07:30", "mode": "transit"},
+    {"time": "18:30", "mode": "clock"}
+  ]
+}
+```
+
+`rules` は時刻の昇順で評価され、現在時刻以前の最後のルールが適用されます。
+スケジュールは 30 秒ごとに確認されます。
+
+## モード切替の仕組み
+
+```
+schedule_loop（30秒ごと）
+    │ スケジュール評価
+    ▼
+broadcast_mode
+    │ SSE プッシュ
+    ▼
+display.html（クライアント）─── iframe の src を切替
+```
+
+管理画面からの手動変更も同じ `broadcast_mode` を経由して SSE で配信されます。
