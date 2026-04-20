@@ -56,15 +56,15 @@
         var offset = 0; // ms: Date.now() + offset = 推定NTP時刻
 
         function tick() {
-            var now = new Date(Date.now() + offset);
-            var h = String(now.getHours()).padStart(2,'0');
-            var m = String(now.getMinutes()).padStart(2,'0');
-            var s = String(now.getSeconds()).padStart(2,'0');
+            var jst = new Date(Date.now() + offset + 9 * 3600000);
+            var h = String(jst.getUTCHours()).padStart(2,'0');
+            var m = String(jst.getUTCMinutes()).padStart(2,'0');
+            var s = String(jst.getUTCSeconds()).padStart(2,'0');
             document.getElementById('time').textContent = h + ':' + m + ':' + s;
-            var y = now.getFullYear();
-            var mo = now.getMonth() + 1;
-            var d = now.getDate();
-            var w = DAYS[now.getDay()];
+            var y = jst.getUTCFullYear();
+            var mo = jst.getUTCMonth() + 1;
+            var d = jst.getUTCDate();
+            var w = DAYS[jst.getUTCDay()];
             document.getElementById('date').textContent = y + '年' + mo + '月' + d + '日（' + w + '）';
         }
 
@@ -77,7 +77,10 @@
         function sampleOnce() {
             var t0 = performance.now();
             return fetch('/api/time')
-                .then(function(res) { return res.json(); })
+                .then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
                 .then(function(data) {
                     var t1 = performance.now();
                     var httpRtt = t1 - t0;
@@ -91,14 +94,20 @@
         function syncTime() {
             var promises = [];
             for (var i = 0; i < 5; i++) promises.push(sampleOnce());
-            Promise.all(promises).then(function(samples) {
+            Promise.allSettled(promises).then(function(results) {
+                var samples = results
+                    .filter(function(r) { return r.status === 'fulfilled'; })
+                    .map(function(r) { return r.value; });
+                if (samples.length === 0) {
+                    console.warn('[clock] sync failed: all samples errored, falling back to local clock');
+                    offset = 0;
+                    return;
+                }
                 var best = samples.reduce(function(a, b) {
                     return a.errorBound < b.errorBound ? a : b;
                 });
                 offset = best.estimated - Date.now();
-                console.log('[clock] synced. error bound ≤ ' + best.errorBound.toFixed(1) + 'ms');
-            }).catch(function(e) {
-                console.warn('[clock] sync failed, using previous offset:', e);
+                console.log('[clock] synced offset=' + offset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/5)');
             });
         }
 

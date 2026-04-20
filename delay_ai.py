@@ -10,7 +10,7 @@ from os import environ
 load_dotenv()
 
 class ModernDelayData(DelayLine):
-    InfoType: Literal["運転見合わせ","計画運休","列車遅延","ダイヤ乱れ","運転再開"] | str
+    InfoType: Literal["運転見合わせ","計画運休","列車遅延","ダイヤ乱れ","運転再開","部分運休"] | str
 
 MDDList = list[ModernDelayData]
 

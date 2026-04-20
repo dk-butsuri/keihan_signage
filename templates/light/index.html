@@ -493,12 +493,12 @@
         // --- Clock ---
         var _clockOffset = 0;
         function _clockTick() {
-            const now  = new Date(Date.now() + _clockOffset);
+            const jst  = new Date(Date.now() + _clockOffset + 9 * 3600000);
             const days = ['日','月','火','水','木','金','土'];
             document.getElementById('clock-date').innerText =
-                `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} (${days[now.getDay()]})`;
+                `${jst.getUTCFullYear()}/${String(jst.getUTCMonth()+1).padStart(2,'0')}/${String(jst.getUTCDate()).padStart(2,'0')} (${days[jst.getUTCDay()]})`;
             document.getElementById('clock-time').innerText =
-                `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+                `${String(jst.getUTCHours()).padStart(2,'0')}:${String(jst.getUTCMinutes()).padStart(2,'0')}:${String(jst.getUTCSeconds()).padStart(2,'0')}`;
         }
         function _clockSchedule() {
             var delay = 1000 - ((Date.now() + _clockOffset) % 1000);
@@ -506,8 +506,11 @@
         }
         function _clockSampleOnce() {
             var t0 = performance.now();
-            return fetch('api/time')
-                .then(function(res) { return res.json(); })
+            return fetch('/api/time')
+                .then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
                 .then(function(data) {
                     var t1 = performance.now();
                     var httpRtt = t1 - t0;
@@ -517,10 +520,19 @@
         function _clockSync() {
             var promises = [];
             for (var i = 0; i < 5; i++) promises.push(_clockSampleOnce());
-            Promise.all(promises).then(function(samples) {
+            Promise.allSettled(promises).then(function(results) {
+                var samples = results
+                    .filter(function(r) { return r.status === 'fulfilled'; })
+                    .map(function(r) { return r.value; });
+                if (samples.length === 0) {
+                    console.warn('[clock] sync failed: all samples errored, falling back to local clock');
+                    _clockOffset = 0;
+                    return;
+                }
                 var best = samples.reduce(function(a, b) { return a.errorBound < b.errorBound ? a : b; });
                 _clockOffset = best.estimated - Date.now();
-            }).catch(function(e) { console.warn('[clock] sync failed:', e); });
+                console.log('[clock] synced offset=' + _clockOffset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/5)');
+            });
         }
 
         // --- Init ---
