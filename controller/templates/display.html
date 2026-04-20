@@ -37,6 +37,7 @@
         var CHECK_INTERVAL_MS = 15000;
 
         function setMode(m) {
+            if (m === currentMode) return;
             currentMode = m;
             document.getElementById('f').src = '/' + m + '/';
         }

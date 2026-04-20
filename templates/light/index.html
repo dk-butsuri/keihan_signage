@@ -380,13 +380,13 @@
         // --- Render: Buses ---
         function renderBuses(busList) {
             const container = document.getElementById('bus-container');
-            container.innerHTML = '';
             if (!busList || busList.length === 0) {
                 container.innerHTML = `<div style="padding:2vw; text-align:center; color:var(--tx-sec); font-size:1.4vw;">バス情報なし</div>`;
                 return;
             }
+            let html = '';
             busList.forEach(b => {
-                container.insertAdjacentHTML('beforeend', `
+                html += `
                     <div style="background:var(--bg-raised); border:1px solid var(--bd-mid); border-top:2px solid var(--amber); border-radius:2px; padding:0.8vw; display:flex; flex-direction:column; gap:0.5vh;">
                         <div style="font-weight:700; font-size:1.5vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-bottom:0.3vh; border-bottom:1px solid var(--bd-sub);">
                             ${b.destination}
@@ -398,8 +398,9 @@
                             </div>
                         </div>
                     </div>
-                `);
+                `;
             });
+            container.innerHTML = html;
         }
 
         // --- Helpers ---
@@ -420,26 +421,18 @@
             const trainSection      = document.getElementById('train-section');
             const busSection        = document.getElementById('bus-section');
 
-            footerContainer.innerHTML  = '';
-            sidebarContainer.innerHTML = '';
-
             const crucial = (!delayList || delayList.length === 0)
                 ? []
                 : delayList.filter(d => d.status !== '平常運転' && d.status !== '掲載なし');
 
             if (crucial.length >= 3) {
-                // Sidebar mode
-                footerSection.style.display  = 'none';
-                delaySidebar.style.display   = 'flex';
-                delaySidebar.style.width     = '25%';
-                trainSection.style.width     = '50%';
-                busSection.style.width       = '25%';
-
+                // Sidebar mode — build HTML first, then apply
+                let html = '';
                 crucial.forEach(d => {
                     const duration = (8 + (d.detail.length * 0.4)) / 1.4;
                     const ago = minutesAgo(d.announced_time);
                     const agoHtml = ago ? `<span style="color:var(--tx-dim); font-size:0.78vw; margin-left:auto; white-space:nowrap;">${ago}に発表</span>` : '';
-                    sidebarContainer.insertAdjacentHTML('beforeend', `
+                    html += `
                         <div style="background:rgba(204,26,46,0.04); border:1px solid rgba(204,26,46,0.15); border-radius:2px; padding:0.6vw; display:flex; flex-direction:column; gap:0.5vh;">
                             <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:0.4vh; border-bottom:1px solid rgba(204,26,46,0.1);">
                                 <span style="background:var(--red); color:#fff; font-weight:700; padding:0.1vh 0.6vw; font-size:0.88vw; border-radius:2px;">${d.line}</span>
@@ -450,43 +443,51 @@
                                 <div class="marquee" style="color:var(--tx-sec); font-size:0.92vw; line-height:1.6em; animation-duration:${duration}s;">${d.detail}</div>
                             </div>
                         </div>
-                    `);
+                    `;
                 });
+                footerSection.style.display  = 'none';
+                delaySidebar.style.display   = 'flex';
+                delaySidebar.style.width     = '25%';
+                trainSection.style.width     = '50%';
+                busSection.style.width       = '25%';
+                footerContainer.innerHTML    = '';
+                sidebarContainer.innerHTML   = html;
 
             } else {
-                // Footer mode
-                footerSection.style.display  = 'flex';
-                delaySidebar.style.display   = 'none';
-                delaySidebar.style.width     = '0';
-                trainSection.style.width     = '66.666%';
-                busSection.style.width       = '33.333%';
-
+                // Footer mode — build HTML first, then apply
+                let html = '';
                 if (crucial.length === 0) {
-                    footerContainer.innerHTML = `
+                    html = `
                         <div style="display:flex; align-items:center; gap:0.8vw; font-size:1.4vw; font-weight:700; color:var(--green);">
                             <span style="display:inline-block; width:0.65vw; height:0.65vw; border-radius:50%; background:var(--green); flex-shrink:0;"></span>
                             現在、平常通り運転しています
                         </div>
                     `;
-                    return;
+                } else {
+                    crucial.forEach(d => {
+                        const ago = minutesAgo(d.announced_time);
+                        const agoHtml = ago ? `<span style="color:var(--tx-sec); font-size:1vw; flex-shrink:0;">${ago}に発表</span>` : '';
+                        html += `
+                            <div style="display:flex; flex-direction:column; border-bottom:1px solid var(--bd-sub); padding:1.2vh 0;">
+                                <div style="display:flex; align-items:center; margin-bottom:0.4vh; gap:0.8vw;">
+                                    <span style="background:var(--red); color:#fff; font-weight:700; padding:0.2vh 0.8vw; font-size:0.95vw; border-radius:2px; flex-shrink:0;">${d.line}</span>
+                                    <span style="color:var(--amber); font-weight:700; font-size:1.4vw; flex-shrink:0;">${d.status}</span>
+                                </div>
+                                <div style="display:flex; align-items:baseline; gap:0.8vw; padding-left:0.5vw;">
+                                    ${agoHtml}
+                                    <span style="color:var(--tx-sec); font-size:1.1vw; line-height:1.5;">${d.detail}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
                 }
-
-                crucial.forEach(d => {
-                    const ago = minutesAgo(d.announced_time);
-                    const agoHtml = ago ? `<span style="color:var(--tx-sec); font-size:1vw; flex-shrink:0;">${ago}に発表</span>` : '';
-                    footerContainer.insertAdjacentHTML('beforeend', `
-                        <div style="display:flex; flex-direction:column; border-bottom:1px solid var(--bd-sub); padding:1.2vh 0;">
-                            <div style="display:flex; align-items:center; margin-bottom:0.4vh; gap:0.8vw;">
-                                <span style="background:var(--red); color:#fff; font-weight:700; padding:0.2vh 0.8vw; font-size:0.95vw; border-radius:2px; flex-shrink:0;">${d.line}</span>
-                                <span style="color:var(--amber); font-weight:700; font-size:1.4vw; flex-shrink:0;">${d.status}</span>
-                            </div>
-                            <div style="display:flex; align-items:baseline; gap:0.8vw; padding-left:0.5vw;">
-                                ${agoHtml}
-                                <span style="color:var(--tx-sec); font-size:1.1vw; line-height:1.5;">${d.detail}</span>
-                            </div>
-                        </div>
-                    `);
-                });
+                delaySidebar.style.display   = 'none';
+                delaySidebar.style.width     = '0';
+                trainSection.style.width     = '66.666%';
+                busSection.style.width       = '33.333%';
+                footerSection.style.display  = 'flex';
+                sidebarContainer.innerHTML   = '';
+                footerContainer.innerHTML    = html;
             }
         }
 
@@ -519,7 +520,7 @@
         }
         function _clockSync() {
             var promises = [];
-            for (var i = 0; i < 5; i++) promises.push(_clockSampleOnce());
+            for (var i = 0; i < 8; i++) promises.push(_clockSampleOnce());
             Promise.allSettled(promises).then(function(results) {
                 var samples = results
                     .filter(function(r) { return r.status === 'fulfilled'; })
@@ -531,7 +532,8 @@
                 }
                 var best = samples.reduce(function(a, b) { return a.errorBound < b.errorBound ? a : b; });
                 _clockOffset = best.estimated - Date.now();
-                console.log('[clock] synced offset=' + _clockOffset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/5)');
+                if (best.errorBound > 100) console.warn('[clock] high error bound: ' + best.errorBound.toFixed(1) + 'ms');
+                console.log('[clock] synced offset=' + _clockOffset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/8)');
             });
         }
 

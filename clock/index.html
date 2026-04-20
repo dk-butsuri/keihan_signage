@@ -93,7 +93,7 @@
 
         function syncTime() {
             var promises = [];
-            for (var i = 0; i < 5; i++) promises.push(sampleOnce());
+            for (var i = 0; i < 8; i++) promises.push(sampleOnce());
             Promise.allSettled(promises).then(function(results) {
                 var samples = results
                     .filter(function(r) { return r.status === 'fulfilled'; })
@@ -107,7 +107,8 @@
                     return a.errorBound < b.errorBound ? a : b;
                 });
                 offset = best.estimated - Date.now();
-                console.log('[clock] synced offset=' + offset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/5)');
+                if (best.errorBound > 100) console.warn('[clock] high error bound: ' + best.errorBound.toFixed(1) + 'ms');
+                console.log('[clock] synced offset=' + offset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/8)');
             });
         }
 
