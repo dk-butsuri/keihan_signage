@@ -12,7 +12,7 @@ features:
 
 trains:
   station_id: 18
-  min_minutes_until: 20
+  min_minutes_until: 15
   max_trains_per_direction: 6
 
 buses:
