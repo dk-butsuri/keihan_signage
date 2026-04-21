@@ -191,6 +191,18 @@ class TrainInfo(BaseModel):
     minutes_remaining: Optional[int] = None
     is_this_station: bool = False
     raw_time: Optional[datetime.datetime] = None
+    # デバッグ用フィールド（アクティブ列車のみ）
+    is_active: bool = False
+    train_number: Optional[str] = None
+    cars: Optional[int] = None
+    train_formation: Optional[int] = None
+    location_col: Optional[int] = None
+    location_row: Optional[int] = None
+    is_stopping: Optional[bool] = None
+    current_station: Optional[str] = None   # 停車中 or 次駅
+    next_stop_name: Optional[str] = None
+    has_premiumcar: Optional[bool] = None
+    line: Optional[str] = None
 
 class StationResponse(BaseModel):
     station_name: str
@@ -253,6 +265,30 @@ async def get_trains():
                 if train.is_stopping and train.next_stop_station == station:
                     status_text = "当駅停車中"
 
+            # デバッグ用フィールドの抽出（アクティブ列車のみ）
+            debug_fields: dict = {}
+            if isinstance(train, ActiveTrainData):
+                try:
+                    is_stop = train.is_stopping
+                    cur_st = train.next_station.station_name.ja if train.next_station else None
+                    next_stop = train.next_stop_station
+                    next_stop_name = next_stop.station_name.ja if next_stop else None
+                    debug_fields = {
+                        "is_active":       True,
+                        "train_number":    train.train_number,
+                        "cars":            train.cars,
+                        "train_formation": train.train_formation,
+                        "location_col":    train.location_col,
+                        "location_row":    train.location_row,
+                        "is_stopping":     is_stop,
+                        "current_station": cur_st,
+                        "next_stop_name":  next_stop_name,
+                        "has_premiumcar":  train.has_premiumcar,
+                        "line":            train.line,
+                    }
+                except Exception as e_dbg:
+                    print(f"[debug fields] error: {e_dbg}")
+
             info = TrainInfo(
                 kind=train.train_type.value,
                 destination=train.destination.station_name.ja,
@@ -261,7 +297,8 @@ async def get_trains():
                 status=status_text,
                 minutes_until=minutes_str,
                 minutes_remaining=minutes_val,
-                raw_time=departure_time
+                raw_time=departure_time,
+                **debug_fields
             )
             if minutes_val < min_minutes:
                 continue

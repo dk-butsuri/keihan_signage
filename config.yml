@@ -3,7 +3,7 @@
 # ============================================================
 
 design:
-  theme: "keihan-led"
+  theme: "debug"   # keihan-led / dark / light / retro / high-contrast / debug
 
 features:
   trains: true
