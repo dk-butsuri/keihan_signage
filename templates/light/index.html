@@ -117,7 +117,7 @@
 
             <div style="flex-shrink:0; display:flex; align-items:center; gap:1vw; padding:0.7vh 1.2vw; background:var(--bg-raised); border-bottom:1px solid var(--bd-sub);">
                 <span class="chip" style="background:rgba(26,110,204,0.1); color:var(--blue); border:1px solid rgba(26,110,204,0.3);">TRAIN</span>
-                <span style="font-size:1.3vw; font-weight:700;">京阪電車 香里園駅</span>
+                <span id="station-name" style="font-size:1.3vw; font-weight:700;">京阪電車 香里園駅</span>
             </div>
 
             <div style="flex:1; display:flex; min-height:0;">
@@ -299,6 +299,8 @@
                 const data = await res.json();
                 renderTrains('trains-up-body',   data.up_trains);
                 renderTrains('trains-down-body', data.down_trains);
+                const el = document.getElementById('station-name');
+                if (el && data.station_name) el.textContent = '京阪電車 ' + data.station_name + '駅';
             } catch (e) { console.error("Train Fetch Error", e); }
             setTimeout(fetchTrains, REFRESH_INTERVAL_TRAIN);
         }

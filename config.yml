@@ -3,7 +3,7 @@
 # ============================================================
 
 design:
-  theme: "debug"   # keihan-led / dark / light / retro / high-contrast / debug
+  theme: "windows-xp"
 
 features:
   trains: true

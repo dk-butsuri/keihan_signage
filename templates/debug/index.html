@@ -163,7 +163,7 @@
     <div id="p-train" class="panel">
         <div class="ph">
             <div class="dot live" style="background:var(--blue); color:var(--blue);"></div>
-            <span style="color:var(--blue); font-size:13px;">TRAIN — 香里園駅</span>
+            <span id="station-name" style="color:var(--blue); font-size:13px;">TRAIN — 香里園駅</span>
             <span style="margin-left:auto; font-size:12px;" id="t-age">never</span>
             <span id="t-st" class="chip" style="background:rgba(74,240,255,.08); color:var(--blue); border:1px solid rgba(74,240,255,.25);">IDLE</span>
         </div>
@@ -504,6 +504,8 @@ async function fetchTrains() {
         document.getElementById('t-raw-sz').textContent = `${raw.length} B`;
         renderTrains('up-body',  data.up_trains,   'up-cnt');
         renderTrains('dn-body',  data.down_trains,  'dn-cnt');
+        const snEl = document.getElementById('station-name');
+        if (snEl && data.station_name) snEl.textContent = 'TRAIN — ' + data.station_name + '駅';
         const tot = (data.up_trains?.length||0) + (data.down_trains?.length||0);
         document.getElementById('ind-t').textContent = `TRAIN ${tot}`;
         document.getElementById('cnt-t').textContent = S.fetchCnt.t;
