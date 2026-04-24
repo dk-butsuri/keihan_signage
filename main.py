@@ -51,6 +51,8 @@ def _get_templates() -> Jinja2Templates:
 async def update_train_loop():
     while True:
         try:
+            global _cfg
+            _cfg = _load_config_file()
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching train positions...")
             await tracker.fetch_pos()
             print("Train fetch complete.")
@@ -230,7 +232,13 @@ async def head_root():
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
-    return _get_templates().TemplateResponse(request, "index.html")
+    try:
+        cfg = _load_config_file()
+        station_id = cfg["trains"]["station_id"]
+        station_name = tracker.stations[station_id].station_name.ja
+    except (KeyError, AttributeError):
+        station_name = ""
+    return _get_templates().TemplateResponse(request, "index.html", {"station_name": station_name})
 
 @app.post("/api/config/reload")
 async def config_reload():
@@ -317,7 +325,11 @@ async def get_trains():
         )
     except Exception as e:
         print(f"Error in /api/trains: {e}")
-        return StationResponse(station_name="香里園(エラー)", up_trains=[], down_trains=[])
+        try:
+            fallback_name = tracker.stations[_cfg["trains"]["station_id"]].station_name.ja
+        except Exception:
+            fallback_name = ""
+        return StationResponse(station_name=fallback_name, up_trains=[], down_trains=[])
 
 @app.get("/api/buses", response_model=List[BusInfo])
 async def get_buses():
