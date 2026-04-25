@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles # type: ignore
 from fastapi.responses import HTMLResponse, Response
@@ -32,6 +33,8 @@ tracker = KHTracker()
 
 latest_bus_data: List['BusInfo'] = []
 latest_delay_data: List['DelayInfo'] = []
+latest_bus_error: Optional[str] = None
+latest_delay_error: Optional[str] = None
 
 
 def _load_config_file() -> dict:
@@ -62,7 +65,7 @@ async def update_train_loop():
 
 
 async def update_bus_loop():
-    global latest_bus_data
+    global latest_bus_data, latest_bus_error
     while True:
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching bus info...")
@@ -94,14 +97,16 @@ async def update_bus_loop():
 
             bus_list.sort(key=parse_time)
             latest_bus_data = bus_list
+            latest_bus_error = None
             print(f"Bus fetch complete (Count: {len(bus_list)}).")
         except Exception as e:
+            latest_bus_error = str(e)
             print(f"Error in bus fetch: {e}")
         await asyncio.sleep(_cfg["intervals"]["bus_seconds"])
 
 
 async def update_delay_loop():
-    global latest_delay_data
+    global latest_delay_data, latest_delay_error
     while True:
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching delay info...")
@@ -118,8 +123,10 @@ async def update_delay_loop():
                     announced_time=d.AnnouncedTime
                 ) for d in delays
             ]
+            latest_delay_error = None
             print(f"Delay fetch complete (Count: {len(latest_delay_data)}).")
         except Exception as e:
+            latest_delay_error = str(e)
             print(f"Error in delay fetch: {e}")
         await asyncio.sleep(_cfg["intervals"]["delay_seconds"])
 
@@ -179,6 +186,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://local.koriwallpaper"],
+    allow_methods=["GET"],
+)
 
 
 # --- Pydantic Models ---
@@ -210,6 +222,7 @@ class StationResponse(BaseModel):
     station_name: str
     up_trains: List[TrainInfo]
     down_trains: List[TrainInfo]
+    error: Optional[str] = None
 
 class BusInfo(BaseModel):
     route_id: str
@@ -217,11 +230,19 @@ class BusInfo(BaseModel):
     status: str
     arrival_time: str
 
+class BusResponse(BaseModel):
+    buses: List[BusInfo]
+    error: Optional[str] = None
+
 class DelayInfo(BaseModel):
     line: str
     status: str
     detail: str
     announced_time: Optional[datetime.datetime] = None
+
+class DelayResponse(BaseModel):
+    delays: List[DelayInfo]
+    error: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -329,15 +350,15 @@ async def get_trains():
             fallback_name = tracker.stations[_cfg["trains"]["station_id"]].station_name.ja
         except Exception:
             fallback_name = ""
-        return StationResponse(station_name=fallback_name, up_trains=[], down_trains=[])
+        return StationResponse(station_name=fallback_name, up_trains=[], down_trains=[], error=str(e))
 
-@app.get("/api/buses", response_model=List[BusInfo])
+@app.get("/api/buses", response_model=BusResponse)
 async def get_buses():
-    return latest_bus_data
+    return BusResponse(buses=latest_bus_data, error=latest_bus_error)
 
-@app.get("/api/delays", response_model=List[DelayInfo])
+@app.get("/api/delays", response_model=DelayResponse)
 async def get_delays():
-    return latest_delay_data
+    return DelayResponse(delays=latest_delay_data, error=latest_delay_error)
 
 @app.get("/api/time")
 async def get_time():

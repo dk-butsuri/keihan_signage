@@ -3,7 +3,7 @@
 # ============================================================
 
 design:
-  theme: "windows-xp"
+  theme: "dark"
 
 features:
   trains: true
@@ -11,7 +11,7 @@ features:
   delays: true
 
 trains:
-  station_id: 18
+  station_id: 17
   min_minutes_until: 15
   max_trains_per_direction: 6
 

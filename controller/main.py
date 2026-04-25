@@ -10,6 +10,7 @@ import yaml
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from time_sync import get_ntp_time
 
 TRANSIT_URL = os.getenv("TRANSIT_URL", "http://transit:8000")
@@ -24,6 +25,13 @@ SERVICE_URLS = {"transit": TRANSIT_URL, "clock": CLOCK_URL}
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 current_mode: str = "transit"
 manual_override_until: Optional[datetime] = None

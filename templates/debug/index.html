@@ -599,18 +599,22 @@ async function fetchBuses() {
         const raw = JSON.stringify(data, null, 2);
         document.getElementById('b-raw').textContent = raw;
         document.getElementById('b-raw-sz').textContent = `${raw.length} B`;
-        renderBuses(data);
-        document.getElementById('ind-b').textContent = `BUS ${data?.length||0}`;
+        renderBuses(data.buses, data.error);
+        document.getElementById('ind-b').textContent = `BUS ${data.buses?.length||0}`;
         document.getElementById('cnt-b').textContent = S.fetchCnt.b;
-        setChip('b-st', `OK/${ms}ms`, 'var(--green)');
-        log('b', `${data?.length||0} buses  ${ms}ms`);
+        setChip('b-st', data.error ? `ERR` : `OK/${ms}ms`, data.error ? 'var(--red)' : 'var(--green)');
+        log('b', data.error ? `ERR: ${data.error}` : `${data.buses?.length||0} buses  ${ms}ms`, !!data.error);
     } catch(e) { setChip('b-st', 'ERR', 'var(--red)'); log('b', String(e), true); }
     setTimeout(fetchBuses, CFG.B);
 }
 
-function renderBuses(buses) {
+function renderBuses(buses, errorMsg) {
     const el = document.getElementById('b-body');
-    if (!buses?.length) { el.innerHTML = `<div style="padding:18px; font-size:16px; color:var(--dim); text-align:center;">NO DATA</div>`; return; }
+    if (!buses?.length) {
+        const errHtml = errorMsg ? `<div style="margin-top:8px; color:var(--red); font-size:13px; font-family:monospace;">ERR: ${errorMsg}</div>` : '';
+        el.innerHTML = `<div style="padding:18px; font-size:16px; color:var(--dim); text-align:center;">NO DATA${errHtml}</div>`;
+        return;
+    }
     el.innerHTML = buses.map((b, i) => {
         const rowBg = i%2===0 ? 'transparent' : 'rgba(255,255,255,0.025)';
         return `
@@ -638,19 +642,23 @@ async function fetchDelays() {
         const raw = JSON.stringify(data, null, 2);
         document.getElementById('d-raw').textContent = raw;
         document.getElementById('d-raw-sz').textContent = `${raw.length} B`;
-        renderDelays(data);
-        renderTicker(data);
-        document.getElementById('ind-d').textContent = `DELAY ${data?.length||0}`;
+        renderDelays(data.delays, data.error);
+        renderTicker(data.delays);
+        document.getElementById('ind-d').textContent = `DELAY ${data.delays?.length||0}`;
         document.getElementById('cnt-d').textContent = S.fetchCnt.d;
-        setChip('d-st', `OK/${ms}ms`, 'var(--green)');
-        log('d', `${data?.length||0} lines  ${ms}ms`);
+        setChip('d-st', data.error ? `ERR` : `OK/${ms}ms`, data.error ? 'var(--red)' : 'var(--green)');
+        log('d', data.error ? `ERR: ${data.error}` : `${data.delays?.length||0} lines  ${ms}ms`, !!data.error);
     } catch(e) { setChip('d-st', 'ERR', 'var(--red)'); log('d', String(e), true); }
     setTimeout(fetchDelays, CFG.D);
 }
 
-function renderDelays(list) {
+function renderDelays(list, errorMsg) {
     const el = document.getElementById('d-body');
-    if (!list?.length) { el.innerHTML = `<div style="padding:18px; font-size:16px; color:var(--dim); text-align:center;">NO DATA</div>`; return; }
+    if (!list?.length) {
+        const errHtml = errorMsg ? `<div style="margin-top:8px; color:var(--red); font-size:13px; font-family:monospace;">ERR: ${errorMsg}</div>` : '';
+        el.innerHTML = `<div style="padding:18px; font-size:16px; color:var(--dim); text-align:center;">NO DATA${errHtml}</div>`;
+        return;
+    }
     el.innerHTML = list.map(d => {
         const bad = d.status !== '平常運転' && d.status !== '掲載なし';
         const sc  = bad ? 'var(--red)' : 'var(--green)';

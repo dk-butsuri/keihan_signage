@@ -297,8 +297,8 @@
             try {
                 const res  = await fetch('api/trains');
                 const data = await res.json();
-                renderTrains('trains-up-body',   data.up_trains);
-                renderTrains('trains-down-body', data.down_trains);
+                renderTrains('trains-up-body',   data.up_trains, data.error);
+                renderTrains('trains-down-body', data.down_trains, data.error);
                 const el = document.getElementById('station-name');
                 if (el && data.station_name) el.textContent = '京阪電車 ' + data.station_name + '駅';
             } catch (e) { console.error("Train Fetch Error", e); }
@@ -310,7 +310,7 @@
                 const res  = await fetch('api/buses');
                 const data = await res.json();
                 scrollers.bus.reset();
-                renderBuses(data);
+                renderBuses(data.buses, data.error);
                 scrollers.bus.start();
             } catch (e) { console.error("Bus Fetch Error", e); }
             setTimeout(fetchBuses, REFRESH_INTERVAL_BUS);
@@ -320,16 +320,17 @@
             try {
                 const res  = await fetch('api/delays');
                 const data = await res.json();
-                renderDelays(data);
+                renderDelays(data.delays, data.error);
             } catch (e) { console.error("Delay Fetch Error", e); }
             setTimeout(fetchDelays, REFRESH_INTERVAL_DELAY);
         }
 
         // --- Render: Trains ---
-        function renderTrains(elementId, trainList) {
+        function renderTrains(elementId, trainList, errorMsg) {
             const tbody = document.getElementById(elementId);
             if (!trainList || trainList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" style="padding:1vw; text-align:center; color:var(--tx-sec); font-size:1.2vw;">表示可能な情報がありません</td></tr>`;
+                const errHtml = errorMsg ? `<br><span style="color:var(--red); font-size:0.9vw; font-family:'JetBrains Mono',monospace;">ERR: ${errorMsg}</span>` : '';
+                tbody.innerHTML = `<tr><td colspan="3" style="padding:1vw; text-align:center; color:var(--tx-sec); font-size:1.2vw;">表示可能な情報がありません${errHtml}</td></tr>`;
                 return;
             }
             let rows = '';
@@ -380,10 +381,11 @@
         }
 
         // --- Render: Buses ---
-        function renderBuses(busList) {
+        function renderBuses(busList, errorMsg) {
             const container = document.getElementById('bus-container');
             if (!busList || busList.length === 0) {
-                container.innerHTML = `<div style="padding:2vw; text-align:center; color:var(--tx-sec); font-size:1.4vw;">バス情報なし</div>`;
+                const errHtml = errorMsg ? `<div style="margin-top:0.8vh; color:var(--red); font-size:1vw; font-family:'JetBrains Mono',monospace;">ERR: ${errorMsg}</div>` : '';
+                container.innerHTML = `<div style="padding:2vw; text-align:center; color:var(--tx-sec); font-size:1.4vw;">バス情報なし${errHtml}</div>`;
                 return;
             }
             let html = '';
@@ -415,13 +417,25 @@
         }
 
         // --- Render: Delays ---
-        function renderDelays(delayList) {
+        function renderDelays(delayList, errorMsg) {
             const footerContainer   = document.getElementById('delay-container');
             const sidebarContainer  = document.getElementById('delay-sidebar-content');
             const footerSection     = document.getElementById('footer-section');
             const delaySidebar      = document.getElementById('delay-sidebar');
             const trainSection      = document.getElementById('train-section');
             const busSection        = document.getElementById('bus-section');
+
+
+            if (errorMsg && (!delayList || delayList.length === 0)) {
+                delaySidebar.style.display = 'none';
+                delaySidebar.style.width   = '0';
+                trainSection.style.width   = '66.666%';
+                busSection.style.width     = '33.333%';
+                footerSection.style.display = 'flex';
+                sidebarContainer.innerHTML = '';
+                footerContainer.innerHTML  = `<div style="display:flex; align-items:center; gap:0.8vw; font-size:1.2vw; color:var(--red);"><span style="display:inline-block; width:0.65vw; height:0.65vw; border-radius:50%; background:var(--red); flex-shrink:0;"></span>遅延情報取得エラー: ${errorMsg}</div>`;
+                return;
+            }
 
             const crucial = (!delayList || delayList.length === 0)
                 ? []
