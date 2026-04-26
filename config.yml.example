@@ -1,0 +1,34 @@
+# ============================================================
+# アプリ設定ファイル（サンプル）
+# config.yml にコピーして使用してください
+# ============================================================
+
+design:
+  theme: "dark"  # "dark" または "light"
+
+features:
+  trains: true
+  buses: true
+  delays: true
+
+trains:
+  station_id: 17        # KH駅番号（この場合、寝屋川市駅）
+  min_minutes_until: 10 # 何分後以降の列車を表示するか
+  max_trains_per_direction: 6
+
+buses:
+  stop_name: "寝屋川市駅［東口］"
+  stop_numbers:
+    - 1
+    - 2
+    - 3
+    - 4
+
+delays:
+  source: "ekispert"  # "yahoo" または "ekispert" (EKISPERT_API_KEYが必須)
+  use_ai: true
+
+intervals:
+  train_seconds: 60
+  bus_seconds: 60
+  delay_seconds: 600

@@ -1,3 +1,6 @@
+# 設定ファイル（config.yml.example をコピーして使用）
+config.yml
+
 # 環境変数・シークレット
 .env
 .env.local
