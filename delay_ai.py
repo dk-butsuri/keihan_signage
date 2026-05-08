@@ -14,6 +14,8 @@ class ModernDelayData(DelayLine):
 
 MDDList = list[ModernDelayData]
 
+_classify_cache: dict[tuple, ModernDelayData] = {}
+
 async def convert(delays: list[DelayLine], bypass:bool = False) -> MDDList:
     if not delays:
         return MDDList([])
@@ -30,39 +32,48 @@ async def convert(delays: list[DelayLine], bypass:bool = False) -> MDDList:
             ))
         return MDDList(res)
 
-    client = genai.Client(api_key=environ["GOOGLE_API_KEY"])
+    def _cache_key(d: DelayLine) -> tuple:
+        return (d.LineName, d.status, d.detail, d.AnnouncedTime)
 
-    async def classify(delay: DelayLine) -> ModernDelayData:
-        response = await client.aio.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
-            contents=f"""
+    uncached = [d for d in delays if _cache_key(d) not in _classify_cache]
+
+    if uncached:
+        client = genai.Client(api_key=environ["GOOGLE_API_KEY"])
+
+        async def classify(delay: DelayLine) -> ModernDelayData:
+            response = await client.aio.models.generate_content(
+                model="gemini-3.1-flash-lite-preview",
+                contents=f"""
             以下の1件の遅延情報のInfoTypeを分類してください。
             InfoTypeは「運転見合わせ」「計画運休」「列車遅延」「ダイヤ乱れ」「運転再開」から選択してください。
             判断できない場合はstatusの文字列をそのままInfoTypeに使用してください。
 
             {delay}
             """,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=ModernDelayData,
-            ),
-        )
-        parsed = response.parsed
-        if not isinstance(parsed, ModernDelayData):
-            return ModernDelayData(**delay.model_dump(), InfoType=delay.status)
-        return parsed
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ModernDelayData,
+                ),
+            )
+            parsed = response.parsed
+            if not isinstance(parsed, ModernDelayData):
+                return ModernDelayData(**delay.model_dump(), InfoType=delay.status)
+            return parsed
 
-    try:
-        responses = await asyncio.gather(*[classify(d) for d in delays])
-    except Exception as e:
-        print(f"[delay_ai] Gemini API error, falling back to bypass: {e}")
-        return await convert(delays, bypass=True)
+        try:
+            responses = await asyncio.gather(*[classify(d) for d in uncached])
+            for delay, parsed in zip(uncached, responses):
+                _classify_cache[_cache_key(delay)] = parsed
+        except Exception as e:
+            print(f"[delay_ai] Gemini API error, falling back to bypass: {e}")
+            for delay in uncached:
+                _classify_cache[_cache_key(delay)] = ModernDelayData(**delay.model_dump(), InfoType=delay.status)
 
     results: dict[str, ModernDelayData] = {}
-    for delay, parsed in zip(delays, responses):
-        key = delay.LineName
-        existing = results.get(key)
+    for delay in delays:
+        cached = _classify_cache[_cache_key(delay)]
+        existing = results.get(delay.LineName)
         if existing is None or (delay.AnnouncedTime is not None and (existing.AnnouncedTime is None or delay.AnnouncedTime >= existing.AnnouncedTime)):
-            results[key] = parsed
+            results[delay.LineName] = cached
 
     return MDDList(list(results.values()))

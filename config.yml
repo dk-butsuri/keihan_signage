@@ -14,6 +14,7 @@ trains:
   station_id: 17
   min_minutes_until: 15
   max_trains_per_direction: 6
+  leading_delay_threshold: 10  # 先着列車がこの分数以上遅延した場合、後続の未発車列車の時刻をハイフン表示
 
 buses:
   stop_name: "同志社香里"

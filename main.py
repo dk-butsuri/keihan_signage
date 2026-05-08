@@ -35,6 +35,7 @@ latest_bus_data: List['BusInfo'] = []
 latest_delay_data: List['DelayInfo'] = []
 latest_bus_error: Optional[str] = None
 latest_delay_error: Optional[str] = None
+_last_raw_delays: list = []
 
 
 def _load_config_file() -> dict:
@@ -106,24 +107,30 @@ async def update_bus_loop():
 
 
 async def update_delay_loop():
-    global latest_delay_data, latest_delay_error
+    global latest_delay_data, latest_delay_error, _last_raw_delays
     while True:
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching delay info...")
             if _cfg["delays"]["source"] == "ekispert":
-                delays = await get_ekispert_delay(environ["EKISPERT_API_KEY"])
+                raw_delays = await get_ekispert_delay(environ["EKISPERT_API_KEY"])
             else:
-                delays = await get_yahoo_delay()
-            delays = await delay_ai.convert(delays, bypass=not _cfg["delays"]["use_ai"])
-            latest_delay_data = [
-                DelayInfo(
-                    line=d.LineName,
-                    status=d.InfoType,
-                    detail=d.detail,
-                    announced_time=d.AnnouncedTime
-                ) for d in delays
-            ]
-            latest_delay_error = None
+                raw_delays = await get_yahoo_delay()
+            new_snapshot = [d.model_dump() for d in raw_delays]
+            if new_snapshot == _last_raw_delays:
+                print("Delay data unchanged, skipping AI classification.")
+                latest_delay_error = None
+            else:
+                _last_raw_delays = new_snapshot
+                delays = await delay_ai.convert(raw_delays, bypass=not _cfg["delays"]["use_ai"])
+                latest_delay_data = [
+                    DelayInfo(
+                        line=d.LineName,
+                        status=d.InfoType,
+                        detail=d.detail,
+                        announced_time=d.AnnouncedTime
+                    ) for d in delays
+                ]
+                latest_delay_error = None
             print(f"Delay fetch complete (Count: {len(latest_delay_data)}).")
         except Exception as e:
             latest_delay_error = str(e)
@@ -223,6 +230,17 @@ class StationResponse(BaseModel):
     up_trains: List[TrainInfo]
     down_trains: List[TrainInfo]
     error: Optional[str] = None
+
+
+def _apply_leading_delay_mask(trains: list, threshold: int) -> None:
+    """先着列車が threshold 分以上遅延している場合、後続の未発車列車の時刻をハイフンで伏せる。"""
+    if len(trains) < 2:
+        return
+    if trains[0].delay < threshold:
+        return
+    for i in range(1, len(trains)):
+        if not trains[i].is_active:
+            trains[i] = trains[i].model_copy(update={"time": "-", "minutes_until": "-"})
 
 class BusInfo(BaseModel):
     route_id: str
@@ -338,6 +356,10 @@ async def get_trains():
 
         up_trains_list.sort(key=lambda x: x.raw_time if x.raw_time else datetime.datetime.max.replace(tzinfo=JST))
         down_trains_list.sort(key=lambda x: x.raw_time if x.raw_time else datetime.datetime.max.replace(tzinfo=JST))
+
+        threshold = _cfg["trains"].get("leading_delay_threshold", 10)
+        _apply_leading_delay_mask(up_trains_list, threshold)
+        _apply_leading_delay_mask(down_trains_list, threshold)
 
         return StationResponse(
             station_name=station.station_name.ja,

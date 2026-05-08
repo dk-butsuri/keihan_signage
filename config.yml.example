@@ -15,6 +15,7 @@ trains:
   station_id: 17        # KH駅番号（この場合、寝屋川市駅）
   min_minutes_until: 10 # 何分後以降の列車を表示するか
   max_trains_per_direction: 6
+  leading_delay_threshold: 10  # 先着列車がN分以上遅延のとき後続未発車列車の時刻をハイフン表示（デフォルト: 10）
 
 buses:
   stop_name: "寝屋川市駅［東口］"
