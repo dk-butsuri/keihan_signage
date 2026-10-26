@@ -1,4 +1,4 @@
-git+https://github.com/dk-butsuri/keihan_tracker.git
+keihan-tracker[delay]==2.5.0
 fastapi
 jinja2
 uvicorn

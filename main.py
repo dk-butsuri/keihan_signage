@@ -71,6 +71,7 @@ async def update_bus_loop():
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching bus info...")
             bus_list = []
+            errors = []
             for num in _cfg["buses"]["stop_numbers"]:
                 try:
                     res = await get_khbus_info(_cfg["buses"]["stop_name"], num)
@@ -84,6 +85,7 @@ async def update_bus_loop():
                                 arrival_time=prms.timetable
                             ))
                 except Exception as e_inner:
+                    errors.append(f"のりば{num}: {e_inner}")
                     print(f"Error fetching bus stop {num}: {e_inner}")
 
             def parse_time(b: 'BusInfo'):
@@ -97,9 +99,13 @@ async def update_bus_loop():
                 return 9999
 
             bus_list.sort(key=parse_time)
-            latest_bus_data = bus_list
-            latest_bus_error = None
-            print(f"Bus fetch complete (Count: {len(bus_list)}).")
+            if errors:
+                # 取得失敗を「接近なし」として表示しない。次に全のりばを取得できるまで前回の表示を保つ。
+                latest_bus_error = " / ".join(errors)
+            else:
+                latest_bus_data = bus_list
+                latest_bus_error = None
+            print(f"Bus fetch complete (Count: {len(latest_bus_data)}).")
         except Exception as e:
             latest_bus_error = str(e)
             print(f"Error in bus fetch: {e}")
@@ -306,11 +312,15 @@ async def get_trains():
             minutes_str = f"あと{minutes_val}分" if minutes_val >= 0 else "まもなく"
 
             status_text = ""
+            is_this_station = (
+                isinstance(train, ActiveTrainData)
+                and train.is_stopping is True
+                and train.next_stop_station == station
+            )
             if effective_delay > 0:
                 status_text = f"遅れ約{effective_delay}分"
-            elif isinstance(train, ActiveTrainData):
-                if train.is_stopping and train.next_stop_station == station:
-                    status_text = "当駅停車中"
+            elif is_this_station:
+                status_text = "当駅停車中"
 
             # デバッグ用フィールドの抽出（アクティブ列車のみ）
             debug_fields: dict = {}
@@ -336,14 +346,16 @@ async def get_trains():
                 except Exception as e_dbg:
                     print(f"[debug fields] error: {e_dbg}")
 
+            destination = train.destination
             info = TrainInfo(
                 kind=train.train_type.value,
-                destination=train.destination.station_name.ja,
+                destination=destination.station_name.ja if destination is not None else "不明",
                 time=departure_time.strftime("%H:%M"),
                 delay=effective_delay,
                 status=status_text,
                 minutes_until=minutes_str,
                 minutes_remaining=minutes_val,
+                is_this_station=is_this_station,
                 raw_time=departure_time,
                 **debug_fields
             )

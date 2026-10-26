@@ -52,6 +52,29 @@ docker compose up -d
 
 ブラウザで `http://localhost:8880` にアクセスします。
 
+### keihan_tracker 2.5.0 への対応
+
+`requirements.txt` は `keihan-tracker[delay]==2.5.0` に固定しています。
+`[delay]` は、引き続き使っている Yahoo! 運行情報の取得に必要です。
+ライブラリ側では Yahoo! と駅すぱあとの取得機能が非推奨になっています。
+
+行先が分からない列車は「不明」と表示します。`is_stopping` の `None` は停車か分からない状態として扱い、
+当駅停車中と表示するのは `True` で当駅にいる列車だけです。
+バスの取得に失敗したときは、前回の一覧を保ち、API の `error` に失敗理由を返します。
+
+営業日の切替は4時になり、ライブラリが5時30分まで朝のダイヤの再取得を行います。
+運用環境では `snapshot_dir="/app/data/snapshots"` を設定し、`./volume/snapshots/` に応答を保存しています。
+10月31日（土）の朝の記録で、公式ダイヤの切替時刻を確認できます。
+
+更新後は transit を再ビルドして起動します。
+
+```bash
+docker compose build transit
+docker compose up -d --no-deps transit
+```
+
+互換性のテストは、アプリの依存と pytest を入れた環境で `python -m pytest tests -q` を実行します。
+
 ## エンドポイント（controller）
 
 | エンドポイント | 説明 |
