@@ -3,9 +3,6 @@
 # config.yml にコピーして使用してください
 # ============================================================
 
-design:
-  theme: "dark"  # "dark" または "light"
-
 features:
   trains: true
   buses: true
@@ -13,9 +10,26 @@ features:
 
 trains:
   station_id: 17        # KH駅番号（この場合、寝屋川市駅）
-  min_minutes_until: 10 # 何分後以降の列車を表示するか
+  sub_station_id: 17           # 行先の下に時刻を添える駅。null で出さない
+  map_from_station: 4           # 見合わせ時の路線の帯の大阪側の端（京橋）
+  map_to_station: 24            # 京都側の端（樟葉）
+  map_compress_ranges:          # 駅名を省いて詰める区間（駅番号の組）
+    - [5, 10]                   # 野江〜土居
+    - [14, 15]                  # 古川橋〜大和田
+  suspended_enter_ratio: 0.25   # 帯の中の列車のうち、見込みが出せない列車がこの割合以上なら
+  suspended_enter_count: 2      # この回数続いたら見合わせ時の表示にする
+  suspended_exit_ratio: 0.15    # この割合未満が
+  suspended_exit_minutes: 5     # この分数続いたら通常時の表示に戻す
+  force_suspended: false        # true にすると判定によらず見合わせ時の表示にする（見た目の確認用）
+  direction_stopped_minutes: 10 # 見合わせ時の方面の表示で、同じ位置にこの分数以上いる列車を止まっているとする
+  min_minutes_until: 15 # 何分後以降の列車を表示するか
   max_trains_per_direction: 6
-  leading_delay_threshold: 10  # 先着列車がN分以上遅延のとき後続未発車列車の時刻をハイフン表示（デフォルト: 10）
+  # 遅れが経過時間どおり増えている列車（keihan_tracker の is_delay_growing）と2時間以上遅れた列車は、
+  # 「あと何分」の代わりに位置と「あと何駅」を表示し、それが先着列車なら後続の未発車列車の時刻をハイフン表示する
+  delay_growing_ratio: 0.7       # 5分前と比べた遅れの増えが、経過時間のこの倍以上なら「増えている」とする（デフォルト: 0.7）
+  stopped_minutes_threshold: 5   # 同じ位置にN分以上いる列車だけ「停止N分」と本数に数える（デフォルト: 5）
+  stuck_minutes: 15              # 同じ位置にN分より長くいる列車（始発駅を除く）も「あと何分」を出さない（デフォルト: 15）
+  stale_minutes: 5               # 列車位置をN分より長く取得できていないか、情報がN分より古いのに走行中の列車が残っていれば、列車の表示を止める（デフォルト: 5）
 
 buses:
   stop_name: "寝屋川市駅［東口］"
@@ -26,8 +40,25 @@ buses:
     - 4
 
 delays:
-  source: "ekispert"  # "yahoo" または "ekispert" (EKISPERT_API_KEYが必須)
-  use_ai: true
+  # 運行情報の取得先（train_operation_info の provider 名）。省略時は関西の公式サイト8社
+  providers: [keihan, jrw, hankyu, hanshin, kintetsu, nankai, osaka_metro, osaka_monorail]
+  # providers: all で、ライブラリの既定の全取得元（全国＋台湾・シンガポール・欧州の一部。yahoo・mta_subway・odakyu・db を除く）
+  # Yahoo! 路線情報（近畿）も使えますが、Yahoo! は運行情報の二次利用を禁じています: providers: [yahoo]
+  # 取得先ごとに表示する路線を絞る（路線名で指定）。省略時は JR西日本を京阪神の路線に絞る。{} で絞らない
+  # minimal の表示順。省略時も京阪・大阪メトロ・JR・私鉄の4組（JRは京阪神の路線）
+  # groups:
+  #   - name: 京阪
+  #     providers: [keihan]
+  #     lines: [京阪本線, 鴨東線, 中之島線, 交野線, 宇治線]
+  #   - name: 大阪メトロ
+  #     providers: [osaka_metro]
+  #   - name: JR
+  #     providers: [jrw]
+  #     lines: [ＪＲ京都線, 学研都市線, 大阪環状線]
+  #   - name: 私鉄
+  #     providers: [hankyu, hanshin, kintetsu, nankai, osaka_monorail]
+  # only_lines:
+  #   jrw: [ＪＲ京都線, 学研都市線, 大阪環状線]
 
 intervals:
   train_seconds: 60

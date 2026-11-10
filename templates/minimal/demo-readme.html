@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>仕様書 · 京阪サイネージ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif;line-height:1.8}
+main{max-width:980px;margin:auto;padding:32px 32px 64px}
+.back{display:inline-block;color:#A1A1A6;font-size:15px;text-decoration:none;margin-bottom:8px}.back:hover{color:#F1F1EE}
+#readme h1{font-size:34px;font-weight:500;line-height:1.4;margin:12px 0 20px}
+#readme h2{font-size:26px;font-weight:500;line-height:1.4;margin:56px 0 16px;padding-bottom:8px;border-bottom:1px solid #26262A}
+#readme h3{font-size:20px;font-weight:500;margin:36px 0 12px}
+#readme p,#readme li{font-size:16.5px}#readme a{color:#A7CEE8}
+#readme img{max-width:100%;height:auto;border:1px solid #26262A;border-radius:4px;vertical-align:middle}
+#readme table{border-collapse:collapse;margin:16px 0;font-size:15.5px;display:block;overflow-x:auto}
+#readme th,#readme td{border:1px solid #26262A;padding:8px 12px;text-align:left;vertical-align:middle}
+#readme th{background:#151517;font-weight:500}
+#readme code{font-size:.9em;background:#151517;border:1px solid #26262A;border-radius:4px;padding:1px 5px}
+#readme pre{background:#151517;border:1px solid #26262A;border-radius:6px;padding:16px;overflow-x:auto;line-height:1.4}#readme pre code{border:0;padding:0}
+#readme strong{font-weight:700}.status{color:#A1A1A6}
+@media(max-width:680px){main{padding:24px 16px 48px}#readme h1{font-size:28px}#readme h2{font-size:22px}}
+</style>
+</head>
+<body><main>
+<a class="back" id="back" href="/demo">← デモ一覧</a>
+<article id="readme"><p class="status">読み込んでいます…</p></article>
+</main>
+<script>
+const base=location.pathname.replace(/\/$/,'');
+document.getElementById('back').href=base.replace(/\/readme$/,'');
+// GitHub と同じ規則で見出しの id を作り、README の目次のリンクをこのページでも使えるようにする
+const slug=text=>text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu,'').replace(/\s/g,'-');
+const loadRenderer=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=base+'/marked.js';script.onload=resolve;script.onerror=()=>reject(new Error('marked.js'));document.head.append(script);});
+Promise.all([fetch(base+'/README.md',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(r.status);return r.text();}),loadRenderer]).then(([md])=>{
+    const root=document.getElementById('readme');
+    root.innerHTML=marked.parse(md);
+    for(const img of root.querySelectorAll('img')){
+        const src=img.getAttribute('src')||'';
+        if(src.startsWith('docs/readme/'))img.src=base+'/images/'+src.slice('docs/readme/'.length);
+        img.loading='lazy';
+        if(/\/column-[^/]*$/.test(img.src))img.style.width='560px';
+    }
+    for(const a of root.querySelectorAll('a[href]')){
+        const href=a.getAttribute('href');
+        if(!/^(https?:|#)/.test(href)){a.replaceWith(...a.childNodes);continue;}
+        if(/^https?:/.test(href)){a.target='_blank';a.rel='noopener';}
+    }
+    for(const h of root.querySelectorAll('h1,h2,h3,h4'))h.id=slug(h.textContent);
+    if(location.hash)document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+}).catch(error=>{document.getElementById('readme').innerHTML='<p class="status">仕様書を読み込めませんでした（'+error.message+'）。</p>';});
+</script></body></html>

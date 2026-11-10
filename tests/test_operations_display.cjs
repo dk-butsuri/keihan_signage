@@ -1,0 +1,95 @@
+const {chromium}=require('playwright');
+const assert=require('assert/strict');
+const fs=require('fs');
+const path=require('path');
+const root=path.resolve(__dirname,'..');
+const out=process.env.SIGNAGE_SCREENSHOTS||'/tmp/signage-redesign';
+const replay=JSON.parse(fs.readFileSync(root+'/demo-data/replay.json'));
+const normal={name:'京阪',mark:'○',status:'平常運転',lines:[]};
+const notices=['大阪環状線','JRゆめ咲線','大和路線','阪和線','関西空港線'].map(name=>({
+    name,ticker_name:name.startsWith('JR')?name:'JR'+name,status:'運転見合わせ',
+    detail:'大阪環状線での線路確認の影響で、運転を見合わせています。',announced_time:'2026-11-06T11:50:00+09:00',
+}));
+let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',status:'運転見合わせ',lines:notices},{...normal,name:'私鉄'}];
+(async()=>{
+    const browser=await chromium.launch();
+    const page=await browser.newPage({viewport:{width:1920,height:1080}});
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.clock.install({time:new Date('2026-11-06T12:00:00+09:00')});
+    await page.route('http://operations.test/**',route=>{
+        const pathname=new URL(route.request().url()).pathname;
+        if(pathname==='/')return route.fulfill({contentType:'text/html',body:fs.readFileSync(root+'/templates/minimal/index.html','utf8').replace('{{ config | tojson }}',JSON.stringify({features:{trains:true,buses:true,delays:true},buses:{stop_name:'同志社香里'}}))});
+        const name=pathname.split('/').at(-1),frame=replay.frames[0];
+        const data=name==='trains'?frame.trains:name==='line'?{...frame.line,suspended:false}:name==='buses'?{buses:Array.from({length:6},()=>({destination:'京阪香里園',arrival_time:'12:13 着予定',status:'6分後'}))}:name==='delays'?{delays:[],groups}:name==='time'?{ts:Date.parse('2026-11-06T12:00:00+09:00')/1000,ntp_rtt_ms:0}:{};
+        return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
+    });
+    await page.goto('http://operations.test/?motion=off');
+    await page.evaluate(()=>document.fonts.ready);
+    assert.equal(await page.locator('#normal-delay-list > div').count(),4);
+    assert.equal(await page.locator('.operation-dot').count(),3);
+    assert.equal(await page.locator('#operation-viewport .operation-item').count(),2);
+    assert.equal(await page.locator('#normal-delay-list .operation-line-name').count(),3);
+    assert.equal(await page.locator('#operation-viewport .operation-page').getAttribute('data-page'),'0');
+    await page.clock.runFor(3000);
+    const progress=await page.evaluate(()=>{
+        const pager=operationPagers.find(p=>p.slide);pager.progress.pause();pager.progress.currentTime=3000;
+        return {easing:pager.progress.effect.getTiming().easing,transform:getComputedStyle($('operation-progress')).transform};
+    });
+    assert.equal(progress.easing,'linear');
+    assert.match(progress.transform,/matrix\(0.5,/);
+    await page.evaluate(()=>{delayData=structuredClone(delayData);for(const group of delayData.groups)for(const line of group.lines)line.announced_time='2026-11-06T11:51:00+09:00';render();});
+    await page.clock.runFor(1000);
+    assert.equal(await page.locator('#normal-delay-list .operation-page-number').last().textContent(),'2/2');
+    await page.clock.runFor(2000);
+    assert.equal(await page.locator('#operation-viewport .operation-page').last().getAttribute('data-page'),'1');
+    assert.equal(await page.locator('.operation-dot.is-current').evaluate(e=>[...e.parentElement.children].indexOf(e)),1);
+    await page.clock.runFor(6000);
+    assert.equal(await page.locator('#operation-viewport .operation-page').last().getAttribute('data-page'),'2');
+    assert.equal(await page.locator('#operation-viewport .operation-page').last().locator('.operation-item').count(),1);
+    await page.clock.runFor(6000);
+    assert.equal(await page.locator('#operation-viewport .operation-page').last().getAttribute('data-page'),'0');
+    await page.evaluate(()=>operationPagers.forEach(p=>p.animations.forEach(a=>a.finish())));
+    await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
+    await page.clock.runFor(9000);
+    assert.equal(await page.locator('#operation-viewport .operation-page').getAttribute('data-page'),'0');
+    await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+    await page.clock.runFor(6000);
+    assert.equal(await page.locator('#operation-viewport .operation-page').last().getAttribute('data-page'),'1');
+    const fades=await page.evaluate(()=>operationPagers.filter(p=>!p.slide&&p.timer).flatMap(p=>p.animations.map(a=>({duration:a.effect.getTiming().duration,opacity:a.effect.getKeyframes().map(f=>f.opacity)}))));
+    assert.ok(fades.some(f=>f.duration===300&&f.opacity[0]==='0'&&f.opacity[1]==='1'),JSON.stringify(fades));
+    await page.evaluate(()=>operationPagers.forEach(p=>p.animations.forEach(a=>a.finish())));
+    const geometry=await page.evaluate(frames=>frames.map(frame=>{
+        trainData=frame.trains;lineData=frame.line;render();
+        const footer=$('operation-slides').getBoundingClientRect(), main=$('suspended').hidden?$('normal'):$('suspended');
+        const clipped=[...main.querySelectorAll('.next-list>div,#normal-up-list>div,#normal-down-list>div,#normal-bus-list>div,#suspended-bus-list>div,.operation-group')].filter(e=>e.getClientRects().length&&e.getBoundingClientRect().bottom>footer.top-12).map(e=>e.textContent);
+        const overlaps=$('suspended').hidden?[]:['up','down'].map(d=>{const col=$('suspended-'+d);return col.querySelector('[data-field="state"]').getBoundingClientRect().bottom-col.querySelector('.next-list').getBoundingClientRect().top;});
+        return {timestamp:frame.ts,clipped,overlaps,map:$('line-map').clientHeight,columns:$('suspended-columns').clientHeight};
+    }),replay.frames);
+    assert.ok(geometry.every(g=>!g.clipped.length&&g.overlaps.every(v=>v<=-12)),JSON.stringify(geometry.filter(g=>g.clipped.length||g.overlaps.some(v=>v>-12)).slice(0,3)));
+    const largest=geometry.reduce((a,b)=>a.map>b.map?a:b);
+    await page.evaluate(frame=>{trainData=frame.trains;lineData=frame.line;render();},replay.frames.find(f=>f.ts===largest.timestamp));
+    await page.screenshot({path:out+'/operations-suspended.png'});
+    await page.clock.runFor(4000);
+    const compact=await page.locator('#suspended-delay-list .operation-compact-lines').evaluateAll(holders=>holders.filter(h=>h.tagName==='DIV').map(h=>({height:h.clientHeight,content:h.lastElementChild.clientHeight})));
+    assert.ok(compact.every(h=>h.content<=h.height),JSON.stringify(compact));
+    // 通常時に全4社で多数の路線が影響を受けても、末尾の会社を落とさない。
+    await page.evaluate(lines=>{lineData.suspended=false;delayData.groups=delayData.groups.map(g=>({...g,mark:'×',status:'運転見合わせ',lines}));render();},notices);
+    const clipped=await page.locator('#normal-delay-list').evaluate(e=>e.scrollHeight>e.clientHeight+1);
+    assert.equal(clipped,false,'all four operator groups must fit');
+    await page.screenshot({path:out+'/operations-normal.png'});
+    await page.evaluate(()=>{delayData.groups=[{name:'JR',mark:'×',status:'運転見合わせ',lines:delayData.groups[0].lines.slice(0,2)}];render();});
+    assert.equal(await page.locator('#operation-pagination').isVisible(),false);
+    assert.equal(await page.locator('#operation-track').isVisible(),false);
+    await page.clock.runFor(18000);
+    assert.equal(await page.locator('#operation-viewport .operation-page').count(),1);
+    await page.evaluate(()=>{delayData.groups=[{name:'JR',mark:'−',status:'情報なし',lines:[]}];render();});
+    assert.equal(await page.locator('#operation-slides').isVisible(),false);
+    assert.match(await page.locator('#normal-delay-list').textContent(),/情報なし/);
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.evaluate(groups=>{delayData.groups=groups;lineData.suspended=true;render();},groups);
+    await page.clock.runFor(6000);
+    assert.equal(await page.locator('#operation-viewport .operation-page').count(),1);
+    assert.equal(await page.locator('#operation-viewport .operation-page').getAttribute('data-page'),'1');
+    assert.deepEqual(errors,[]);
+    await browser.close();console.log(`Operations: 6s slides/linear progress/dots/4s sidebar/stable refresh/${replay.frames.length} layouts/single page/unknown/reduced motion passed`);
+})().catch(e=>{console.error(e);process.exit(1)});

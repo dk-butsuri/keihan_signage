@@ -1,6 +1,10 @@
 # 設定ファイル（config.yml.example をコピーして使用）
 config.yml
 
+# 本番の運用データ（取得した列車位置・運行情報の記録、表示の切り替え予定）
+/volume/
+/controller_data/
+
 # 環境変数・シークレット
 .env
 .env.local
@@ -17,6 +21,8 @@ venv/
 # テスト・開発
 .pytest_cache/
 tracker_info.txt
+demo-data/*.json
+demo-data/*.tmp
 
 # IDE
 .vscode/
@@ -25,3 +31,10 @@ tracker_info.txt
 # Docker
 *.log
 docker-compose.override.yml
+
+# 内部検討用の計画と見本
+/docs/animation-plan.md
+/docs/animation-preview/
+/docs/redesign-plan.md
+/docs/artifact/
+/docs/mock/

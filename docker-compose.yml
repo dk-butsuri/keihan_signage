@@ -10,7 +10,7 @@ services:
       - TZ=Asia/Tokyo
       - TRANSIT_URL=http://transit:8000
       - CLOCK_URL=http://clock:80
-      - ADMIN_TOKEN=changeme
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
     restart: always
     depends_on:
       - transit

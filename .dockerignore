@@ -4,3 +4,5 @@ venv
 .env
 .pytest_cache
 *.pyc
+volume
+controller_data

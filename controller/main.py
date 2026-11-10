@@ -15,7 +15,8 @@ from time_sync import get_ntp_time
 
 TRANSIT_URL = os.getenv("TRANSIT_URL", "http://transit:8000")
 CLOCK_URL = os.getenv("CLOCK_URL", "http://clock:80")
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "changeme")
+# 未設定なら管理操作をすべて拒否する。既定のパスワードで動かさないため
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 SCHEDULE_FILE = DATA_DIR / "schedule.json"
 CONFIG_FILE = Path(os.getenv("CONFIG_FILE", "/app/config.yml"))
@@ -36,6 +37,12 @@ app.add_middleware(
 current_mode: str = "transit"
 manual_override_until: Optional[datetime] = None
 subscribers: list[asyncio.Queue] = []
+display_clients: dict[int, datetime] = {}
+
+
+def _require_admin(request: Request) -> None:
+    if not ADMIN_TOKEN or request.headers.get("Authorization", "") != f"Bearer {ADMIN_TOKEN}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def load_schedule() -> dict:
@@ -118,9 +125,7 @@ async def get_mode():
 
 @app.post("/api/mode")
 async def set_mode(request: Request):
-    auth = request.headers.get("Authorization", "")
-    if auth != f"Bearer {ADMIN_TOKEN}":
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    _require_admin(request)
     body = await request.json()
     mode = body.get("mode")
     if mode not in VALID_MODES:
@@ -135,9 +140,7 @@ async def set_mode(request: Request):
 
 @app.delete("/api/mode/override")
 async def clear_override(request: Request):
-    auth = request.headers.get("Authorization", "")
-    if auth != f"Bearer {ADMIN_TOKEN}":
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    _require_admin(request)
     global manual_override_until
     manual_override_until = None
     await _apply_schedule()
@@ -148,6 +151,10 @@ async def clear_override(request: Request):
 async def mode_stream(request: Request):
     queue: asyncio.Queue = asyncio.Queue()
     subscribers.append(queue)
+    # 管理画面以外の接続はすべて表示端末として数える（更新前に開いた端末は client を付けずに接続してくる）
+    is_display = request.query_params.get("client") != "admin"
+    if is_display:
+        display_clients[id(queue)] = datetime.now()
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
@@ -162,12 +169,25 @@ async def mode_stream(request: Request):
                     yield ": keepalive\n\n"
         finally:
             subscribers.remove(queue)
+            display_clients.pop(id(queue), None)
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/auth")
+async def check_auth(request: Request):
+    _require_admin(request)
+    return Response(status_code=204)
+
+
+@app.get("/api/displays")
+async def get_displays():
+    return {"count": len(display_clients),
+            "connected_since": sorted(t.isoformat() for t in display_clients.values())}
 
 
 @app.get("/api/time")
@@ -185,9 +205,7 @@ async def get_schedule():
 
 @app.put("/api/schedule")
 async def put_schedule(request: Request):
-    auth = request.headers.get("Authorization", "")
-    if auth != f"Bearer {ADMIN_TOKEN}":
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    _require_admin(request)
     data = await request.json()
     save_schedule(data)
     return data
@@ -209,15 +227,30 @@ async def get_config_json():
 
 @app.put("/api/config")
 async def put_config(request: Request):
-    auth = request.headers.get("Authorization", "")
-    if auth != f"Bearer {ADMIN_TOKEN}":
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    _require_admin(request)
     text = (await request.body()).decode("utf-8")
     try:
         yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
-    CONFIG_FILE.write_text(text, encoding="utf-8")
+    return await _write_config(text)
+
+
+@app.put("/api/config/json")
+async def put_config_json(request: Request):
+    _require_admin(request)
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="config must be an object")
+    return await _write_config(yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
+
+
+async def _write_config(text: str) -> dict:
+    # config.yml はファイル単位の bind mount なので、置き換えずに中身だけ書き換える（inode を保つ）
+    with CONFIG_FILE.open("r+", encoding="utf-8") as f:
+        f.seek(0)
+        f.write(text)
+        f.truncate()
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             await client.post(f"{TRANSIT_URL}/api/config/reload")
@@ -234,6 +267,7 @@ async def _proxy(target_base: str, path: str, request: Request) -> Response:
             resp = await client.request(
                 method=request.method,
                 url=url,
+                params=request.query_params.multi_items(),
                 headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
                 content=await request.body(),
             )
@@ -242,6 +276,17 @@ async def _proxy(target_base: str, path: str, request: Request) -> Response:
             return Response(content=resp.content, status_code=resp.status_code, headers=headers)
         except httpx.RequestError:
             raise HTTPException(status_code=502, detail="Upstream unreachable")
+
+
+@app.api_route("/demo", methods=["GET", "HEAD"])
+@app.api_route("/demo/", methods=["GET", "HEAD"])
+async def proxy_demo_root(request: Request):
+    return await _proxy(TRANSIT_URL, "demo", request)
+
+
+@app.api_route("/demo/{path:path}", methods=["GET", "HEAD"])
+async def proxy_demo(path: str, request: Request):
+    return await _proxy(TRANSIT_URL, f"demo/{path}", request)
 
 
 @app.api_route("/transit/{path:path}", methods=["GET", "HEAD", "POST"])

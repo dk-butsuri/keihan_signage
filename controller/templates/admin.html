@@ -1,743 +1,391 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>サイネージ管理</title>
-    <style>
-        :root {
-            --bg: #0d1117; --surface: #161b22; --surface2: #1c2128; --border: #30363d;
-            --tx: #e6edf3; --tx-sec: #7d8590;
-            --blue: #388bfd; --green: #3fb950; --red: #f85149; --amber: #d29922;
-        }
-        *, *::before, *::after { box-sizing: border-box; }
-        body {
-            margin: 0; font-family: -apple-system, 'Segoe UI', sans-serif;
-            background: var(--bg); color: var(--tx);
-            min-height: 100vh; padding: 2rem; max-width: 720px;
-        }
-        h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; }
-        h2 { font-size: 0.8rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--tx-sec); text-transform: uppercase; letter-spacing: 0.05em; }
-        h3 { font-size: 0.85rem; font-weight: 600; margin: 1.25rem 0 0.6rem; color: var(--tx); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
-        h3:first-of-type { margin-top: 0; }
-        .card {
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem;
-        }
-        .card.disabled-card { opacity: 0.45; pointer-events: none; }
-
-        /* --- Badges --- */
-        .badge {
-            display: inline-flex; align-items: center; gap: 0.4rem;
-            padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
-        }
-        .badge.transit { background: rgba(56,139,253,0.15); color: var(--blue); border: 1px solid rgba(56,139,253,0.3); }
-        .badge.clock   { background: rgba(63,185,80,0.15);  color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
-        .badge.manual  { background: rgba(210,153,34,0.15); color: var(--amber); border: 1px solid rgba(210,153,34,0.3); }
-        .badge.schedule{ background: rgba(125,133,144,0.15);color: var(--tx-sec); border: 1px solid var(--border); }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-
-        /* --- Mode card --- */
-        .status-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; flex-wrap: wrap; }
-        .override-note { font-size: 0.8rem; color: var(--tx-sec); margin-bottom: 1rem; }
-        .override-note span { color: var(--amber); }
-        .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
-        .divider { width: 1px; height: 24px; background: var(--border); margin: 0 0.25rem; }
-
-        /* --- Buttons --- */
-        button {
-            padding: 0.5rem 1.25rem; border-radius: 6px; border: 1px solid var(--border);
-            background: var(--surface); color: var(--tx); font-size: 0.9rem; cursor: pointer;
-            transition: background 0.15s, border-color 0.15s;
-        }
-        button:hover { background: #21262d; }
-        button.active-transit { background: rgba(56,139,253,0.2); border-color: var(--blue); color: var(--blue); }
-        button.active-clock   { background: rgba(63,185,80,0.2);  border-color: var(--green); color: var(--green); }
-        button.sched-btn { background: rgba(210,153,34,0.1); border-color: rgba(210,153,34,0.4); color: var(--amber); font-size: 0.85rem; padding: 0.4rem 1rem; }
-        button.sched-btn:hover { background: rgba(210,153,34,0.25); }
-        button.save-btn { background: rgba(56,139,253,0.15); color: var(--blue); border-color: rgba(56,139,253,0.3); }
-        button.save-btn:hover { background: rgba(56,139,253,0.3); }
-        button.danger-btn { background: rgba(248,81,73,0.05); color: var(--red); border-color: rgba(248,81,73,0.3); }
-        button.danger-btn:hover { background: rgba(248,81,73,0.15); }
-
-        /* --- Form controls --- */
-        select, input[type="time"], input[type="password"], input[type="text"], input[type="number"] {
-            background: var(--bg); color: var(--tx); border: 1px solid var(--border);
-            border-radius: 6px; padding: 0.45rem 0.75rem; font-size: 0.9rem;
-        }
-        input:focus, select:focus { outline: none; border-color: var(--blue); }
-        label { font-size: 0.85rem; color: var(--tx-sec); }
-
-        /* --- Schedule table --- */
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
-        th { color: var(--tx-sec); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
-        tr:last-child td { border-bottom: none; }
-        .del-btn { padding: 0.25rem 0.6rem; font-size: 0.8rem; color: var(--red); border-color: rgba(248,81,73,0.3); background: rgba(248,81,73,0.05); }
-        .del-btn:hover { background: rgba(248,81,73,0.15); }
-        .add-row { display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap; align-items: center; }
-        .default-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; align-items: center; }
-        .token-row { display: flex; gap: 0.75rem; }
-        input[type="password"] { flex: 1; }
-
-        /* --- Config form --- */
-        .cfg-row {
-            display: flex; align-items: center; gap: 1rem;
-            padding: 0.6rem 0; border-bottom: 1px solid var(--border);
-        }
-        .cfg-row:last-child { border-bottom: none; padding-bottom: 0; }
-        .cfg-label { flex: 0 0 160px; font-size: 0.9rem; color: var(--tx); }
-        .cfg-hint { font-size: 0.75rem; color: var(--tx-sec); margin-top: 0.15rem; }
-        .cfg-control { flex: 1; display: flex; align-items: center; gap: 0.5rem; }
-
-        /* Toggle switch */
-        .toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
-        .toggle input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider {
-            position: absolute; inset: 0; background: var(--border);
-            border-radius: 24px; cursor: pointer; transition: background 0.2s;
-        }
-        .toggle-slider::before {
-            content: ''; position: absolute; width: 18px; height: 18px;
-            left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s;
-        }
-        .toggle input:checked + .toggle-slider { background: var(--green); }
-        .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
-
-        /* Theme picker */
-        .theme-picker { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        .theme-btn {
-            padding: 0.35rem 0.85rem; border-radius: 6px; border: 1px solid var(--border);
-            background: var(--surface2); color: var(--tx-sec); font-size: 0.82rem; cursor: pointer;
-            transition: all 0.15s; display: flex; align-items: center; gap: 0.4rem;
-        }
-        .theme-btn:hover { border-color: var(--blue); color: var(--tx); }
-        .theme-btn.active { border-color: var(--blue); background: rgba(56,139,253,0.15); color: var(--blue); }
-        .theme-swatch { width: 10px; height: 10px; border-radius: 3px; }
-
-        /* Segmented control */
-        .seg-ctrl { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-        .seg-btn {
-            padding: 0.35rem 1rem; border: none; background: var(--surface2);
-            color: var(--tx-sec); font-size: 0.85rem; cursor: pointer; flex: 1;
-            border-right: 1px solid var(--border); transition: all 0.15s;
-        }
-        .seg-btn:last-child { border-right: none; }
-        .seg-btn.active { background: rgba(56,139,253,0.2); color: var(--blue); font-weight: 600; }
-        .seg-btn:hover:not(.active) { background: #21262d; }
-
-        /* Slider */
-        .slider-wrap { display: flex; align-items: center; gap: 0.75rem; flex: 1; }
-        input[type="range"] {
-            -webkit-appearance: none; flex: 1; height: 4px;
-            background: var(--border); border-radius: 4px; outline: none; cursor: pointer;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 16px; height: 16px;
-            border-radius: 50%; background: var(--blue); cursor: pointer;
-        }
-        .slider-val { min-width: 60px; font-size: 0.85rem; color: var(--tx); text-align: right; font-variant-numeric: tabular-nums; }
-
-        /* Stepper */
-        .stepper { display: flex; align-items: center; gap: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-        .step-btn { padding: 0.35rem 0.75rem; background: var(--surface2); border: none; color: var(--tx); cursor: pointer; font-size: 1rem; line-height: 1; }
-        .step-btn:hover { background: #21262d; }
-        .step-val { padding: 0.35rem 0.75rem; font-size: 0.9rem; min-width: 40px; text-align: center; background: var(--bg); border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
-
-        /* Chips */
-        .chips-wrap { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-        .chip {
-            display: inline-flex; align-items: center; gap: 0.3rem;
-            padding: 0.2rem 0.6rem; background: rgba(56,139,253,0.1);
-            border: 1px solid rgba(56,139,253,0.3); border-radius: 999px;
-            font-size: 0.82rem; color: var(--blue);
-        }
-        .chip-del { cursor: pointer; opacity: 0.6; font-size: 0.9rem; line-height: 1; padding: 0 0.1rem; }
-        .chip-del:hover { opacity: 1; }
-        .chip-add { display: flex; align-items: center; gap: 0.4rem; }
-        .chip-add input[type="number"] { width: 70px; padding: 0.25rem 0.5rem; font-size: 0.85rem; }
-
-        /* Warning / info notes */
-        .warn-note {
-            display: flex; align-items: flex-start; gap: 0.5rem;
-            background: rgba(210,153,34,0.08); border: 1px solid rgba(210,153,34,0.25);
-            border-radius: 6px; padding: 0.6rem 0.75rem; font-size: 0.82rem; color: var(--amber);
-            margin-top: 0.75rem;
-        }
-        .warn-note.info { background: rgba(56,139,253,0.08); border-color: rgba(56,139,253,0.25); color: var(--blue); }
-
-        /* Messages */
-        #msg, #cfg-msg { font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
-        .ok  { color: var(--green); }
-        .err { color: var(--red); }
-
-        /* Save bar */
-        .cfg-save-bar {
-            display: flex; align-items: center; gap: 1rem;
-            margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border);
-        }
-    </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理 · 京阪サイネージ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
+<style>
+:root{--bg:#0B0B0C;--panel:#151517;--panel2:#1B1B1F;--line:#26262A;--line2:#3A3A40;--tx:#F1F1EE;--sub:#A1A1A6;--dim:#7C7C82;--ok:#3DBE6E;--warn:#FFB020;--bad:#FF5B2E;--accent:#A7CEE8;--accent-line:#476480}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:'Zen Kaku Gothic New',sans-serif;line-height:1.6;font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+header{position:sticky;top:0;z-index:5;background:rgba(11,11,12,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.bar{max-width:1320px;margin:auto;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.bar h1{font-size:19px;font-weight:500;margin:0;white-space:nowrap}
+.overall{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border-radius:999px;border:1px solid var(--line2);font-size:14px}
+.overall .dot{width:9px;height:9px}
+.links{display:flex;gap:16px;margin-left:auto;font-size:14px;flex-wrap:wrap}
+.links a{text-decoration:none;color:var(--sub)}.links a:hover{color:var(--tx)}
+#auth-state{font-size:14px;color:var(--sub);display:flex;align-items:center;gap:10px}
+main{max-width:1320px;margin:auto;padding:24px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
+.col{display:flex;flex-direction:column;gap:20px;min-width:0}
+section.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 22px}
+.card h2{font-size:17px;font-weight:500;margin:0 0 14px;display:flex;align-items:center;gap:10px}
+.card h2 .aside{margin-left:auto;font-size:13px;color:var(--dim);font-weight:400}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim);flex-shrink:0}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.dot.off{background:transparent;border:1.5px solid var(--dim)}
+.preview{position:relative;aspect-ratio:16/9;background:#000;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.preview iframe{position:absolute;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0;pointer-events:none}
+.mode-line{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:14px}
+.mode-name{font-size:24px;font-weight:500}
+.mode-source{color:var(--sub);font-size:15px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:15px;line-height:1.4}
+.btn:hover:not(:disabled){border-color:var(--sub)}
+.btn.primary{background:#1D2A35;border-color:var(--accent-line);color:var(--accent)}
+.btn.primary:hover:not(:disabled){border-color:var(--accent)}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.small{padding:3px 10px;font-size:13px}
+select,input[type=text],input[type=number],input[type=time],input[type=password],textarea{background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:6px 10px;font-size:15px}
+input:focus,select:focus,textarea:focus,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input:disabled,select:disabled,textarea:disabled{opacity:.5}
+.status-list{display:flex;flex-direction:column}
+.status-row{display:grid;grid-template-columns:14px 104px minmax(0,1fr);gap:4px 12px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
+.status-row:first-child{border-top:0;padding-top:2px}
+.status-row .dot{margin-top:7px}
+.status-row .name{color:var(--sub);font-size:15px}
+.status-row .main{font-size:16px}
+.status-row .detail{grid-column:3;font-size:13.5px;color:var(--dim);word-break:break-word}
+.status-row .detail.bad{color:var(--bad)}.status-row .detail.warn{color:var(--warn)}
+.timeline{position:relative;height:34px;border-radius:6px;overflow:hidden;display:flex;border:1px solid var(--line)}
+.timeline .seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:12.5px;white-space:nowrap;overflow:hidden}
+.seg.transit{background:#1D2A35;color:var(--accent)}.seg.clock{background:#2A2418;color:#E8C98A}
+.timeline .now{position:absolute;top:0;bottom:0;width:2px;background:var(--tx)}
+.ticks{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin:4px 1px 12px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td,th{text-align:left;padding:8px 6px;border-top:1px solid var(--line)}
+th{color:var(--dim);font-weight:400;font-size:13px;border-top:0}
+td:last-child{text-align:right}
+.field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+.field:first-of-type{border-top:0}
+.field label{font-size:15px}.field .hint{grid-column:1/-1;font-size:13px;color:var(--dim);margin-top:-2px}
+.field input[type=number]{width:96px;text-align:right}
+.field input[type=text]{width:220px}
+.group-title{font-size:13px;color:var(--dim);letter-spacing:.08em;margin:18px 0 2px}
+.group-title:first-child{margin-top:0}
+.switch{position:relative;width:44px;height:24px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0;position:absolute}
+.switch span{position:absolute;inset:0;background:var(--line2);border-radius:12px;transition:background .15s;cursor:pointer}
+.switch span::after{content:'';position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:var(--tx);transition:transform .15s}
+.switch input:checked+span{background:var(--ok)}.switch input:checked+span::after{transform:translateX(20px)}
+.switch input:disabled+span{opacity:.45;cursor:not-allowed}
+.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.savebar{display:flex;gap:12px;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.msg{font-size:14px}.msg.ok{color:var(--ok)}.msg.err{color:var(--bad)}
+details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;color:var(--sub);font-size:14px}
+textarea{width:100%;min-height:340px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.5}
+.login{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.login input{flex:1;min-width:180px}
+.note{font-size:13.5px;color:var(--dim);margin:8px 0 0}
+.locked .needs-auth{opacity:.5}
+@media(max-width:960px){main{grid-template-columns:1fr;padding:16px}.col{display:contents}#login-card{order:0}#status-card{order:1}#display-card{order:2}#schedule-card{order:3}#settings-card{order:4}.bar{padding:12px 16px}.links{margin-left:0;width:100%}}
+@media(max-width:480px){.status-row{grid-template-columns:14px 80px minmax(0,1fr)}.field input[type=text]{width:160px}}
+</style>
 </head>
-<body>
-    <h1>サイネージ管理</h1>
+<body class="locked">
+<header><div class="bar">
+  <h1>京阪サイネージ 管理</h1>
+  <span class="overall" id="overall"><span class="dot"></span><span id="overall-text">確認中</span></span>
+  <nav class="links"><a href="/" target="_blank" rel="noopener">サイネージを開く ↗</a><a href="/demo" target="_blank" rel="noopener">デモ ↗</a><a href="/demo/readme" target="_blank" rel="noopener">仕様書 ↗</a></nav>
+  <div id="auth-state"></div>
+</div></header>
 
-    <!-- 認証 -->
-    <div class="card">
-        <h2>認証トークン</h2>
-        <div class="token-row">
-            <input type="password" id="token" placeholder="Admin token">
-            <button onclick="saveToken()">保存</button>
-        </div>
+<main>
+<div class="col">
+  <section class="card" id="login-card" hidden>
+    <h2>ログイン</h2>
+    <form class="login" id="login-form"><input type="password" id="token" placeholder="管理用パスワード" autocomplete="current-password" aria-label="管理用パスワード"><button class="btn primary" type="submit">ログイン</button><span class="msg" id="login-msg" role="status"></span></form>
+    <p class="note">状況の確認はログインしなくてもできます。表示の切り替えと設定の変更にはログインが必要です。</p>
+  </section>
+
+  <section class="card" id="display-card">
+    <h2>いまの表示<span class="aside" id="preview-note"></span></h2>
+    <div class="preview" id="preview"><iframe id="preview-frame" title="表示中の画面" tabindex="-1"></iframe></div>
+    <div class="mode-line"><span class="mode-name" id="mode-name">—</span><span class="mode-source" id="mode-source"></span></div>
+    <div class="actions needs-auth">
+      <button class="btn" id="to-transit" data-mode="transit">交通情報に切り替え</button>
+      <button class="btn" id="to-clock" data-mode="clock">時計に切り替え</button>
+      <select id="override-minutes" aria-label="切り替える時間"><option value="30">30分間</option><option value="60" selected>1時間</option><option value="180">3時間</option><option value="720">12時間</option></select>
+      <button class="btn" id="back-to-schedule" hidden>予定どおりに戻す</button>
+      <span class="msg" id="mode-msg" role="status"></span>
     </div>
+  </section>
 
-    <!-- モード -->
-    <div class="card">
-        <h2>現在のモード</h2>
-        <div class="status-row">
-            <span class="badge transit" id="mode-badge"><span class="dot"></span>読み込み中…</span>
-            <span class="badge schedule" id="source-badge">—</span>
-        </div>
-        <div class="override-note" id="override-note" style="display:none">
-            手動上書き中 — <span id="override-until"></span> まで
-        </div>
-        <div class="btn-row">
-            <button id="btn-transit" onclick="switchMode('transit')">電車・バス情報</button>
-            <button id="btn-clock"   onclick="switchMode('clock')">大時計</button>
-            <div class="divider"></div>
-            <label>上書き時間</label>
-            <select id="override-minutes">
-                <option value="30">30分</option>
-                <option value="60" selected>1時間</option>
-                <option value="120">2時間</option>
-                <option value="360">6時間</option>
-                <option value="1440">24時間</option>
-            </select>
-            <div class="divider"></div>
-            <button class="sched-btn" id="sched-btn" onclick="returnToSchedule()" style="display:none">
-                ↺ スケジュールに戻す
-            </button>
-        </div>
-        <div id="msg"></div>
+  <section class="card" id="schedule-card">
+    <h2>切り替えの予定</h2>
+    <div class="timeline" id="timeline" aria-hidden="true"></div>
+    <div class="ticks" aria-hidden="true"><span>0時</span><span>6時</span><span>12時</span><span>18時</span><span>24時</span></div>
+    <table><thead><tr><th>時刻</th><th>表示</th><th></th></tr></thead><tbody id="rules"></tbody></table>
+    <div class="actions needs-auth">
+      <input type="time" id="rule-time" value="07:30" aria-label="時刻">
+      <select id="rule-mode" aria-label="表示"><option value="transit">交通情報</option><option value="clock">時計</option></select>
+      <button class="btn" id="add-rule">予定を追加</button>
+      <span class="msg" id="schedule-msg" role="status"></span>
     </div>
+    <p class="note">0時から最初の予定までは「<select id="default-mode" class="needs-auth" aria-label="最初の予定までの表示"><option value="transit">交通情報</option><option value="clock">時計</option></select>」を表示します。予定は30秒ごとに確かめます。</p>
+  </section>
+</div>
 
-    <!-- スケジュール -->
-    <div class="card">
-        <h2>自動スケジュール</h2>
-        <div class="default-row">
-            <label>デフォルトモード</label>
-            <select id="default-mode">
-                <option value="transit">電車・バス情報</option>
-                <option value="clock">大時計</option>
-            </select>
-        </div>
-        <table>
-            <thead><tr><th>時刻</th><th>モード</th><th></th></tr></thead>
-            <tbody id="schedule-body"></tbody>
-        </table>
-        <div class="add-row">
-            <input type="time" id="new-time" value="07:30">
-            <select id="new-mode">
-                <option value="transit">電車・バス情報</option>
-                <option value="clock">大時計</option>
-            </select>
-            <button class="save-btn" onclick="addRule()">+ 追加</button>
-        </div>
-    </div>
+<div class="col">
+  <section class="card" id="status-card">
+    <h2>動作状況<span class="aside" id="status-checked"></span></h2>
+    <div class="status-list" id="status-list"></div>
+  </section>
 
-    <!-- アプリ設定 -->
-    <div class="card">
-        <h2>アプリ設定</h2>
+  <section class="card" id="settings-card">
+    <h2>設定</h2>
+    <form id="config-form">
+      <div class="group-title">表示する情報</div>
+      <div class="field"><label for="f-trains">列車</label><label class="switch"><input type="checkbox" id="f-trains" data-key="features.trains"><span></span></label></div>
+      <div class="field"><label for="f-buses">バス</label><label class="switch"><input type="checkbox" id="f-buses" data-key="features.buses"><span></span></label></div>
+      <div class="field"><label for="f-delays">運行情報</label><label class="switch"><input type="checkbox" id="f-delays" data-key="features.delays"><span></span></label></div>
 
-        <h3>デザイン</h3>
-        <div class="cfg-row">
-            <div class="cfg-label">テーマ</div>
-            <div class="cfg-control">
-                <div class="theme-picker" id="theme-picker">
-                    <button class="theme-btn" data-theme="dark"         onclick="setTheme(this)"><span class="theme-swatch" style="background:#0d1117;border:1px solid #555"></span>ダーク</button>
-                    <button class="theme-btn" data-theme="light"        onclick="setTheme(this)"><span class="theme-swatch" style="background:#f5f5f5;border:1px solid #ccc"></span>ライト</button>
-                    <button class="theme-btn" data-theme="near-future"  onclick="setTheme(this)"><span class="theme-swatch" style="background:#080C05;border:1px solid #39FF14"></span>近未来</button>
-                    <button class="theme-btn" data-theme="windows-xp"   onclick="setTheme(this)"><span class="theme-swatch" style="background:#ECE9D8;border:2px solid #245EDC"></span>Windows XP</button>
-                    <button class="theme-btn" data-theme="high-contrast" onclick="setTheme(this)"><span class="theme-swatch" style="background:#000;border:2px solid #ff0"></span>高コントラスト</button>
-                    <button class="theme-btn" data-theme="keihan-led"   onclick="setTheme(this)"><span class="theme-swatch" style="background:#001800;border:1px solid #0f0"></span>京阪LED</button>
-                    <button class="theme-btn" data-theme="debug"        onclick="setTheme(this)"><span class="theme-swatch" style="background:#030812;border:1px solid #1a2e48"></span>デバッグ</button>
-                </div>
-            </div>
-        </div>
+      <div class="group-title">列車</div>
+      <div class="field"><label for="t-station">駅番号</label><input type="number" id="t-station" data-key="trains.station_id" min="1" max="42"><div class="hint" id="station-hint">京阪の駅番号（KH18 なら 18）</div></div>
+      <div class="field"><label for="t-sub">時刻を添える駅の番号</label><input type="number" id="t-sub" data-key="trains.sub_station_id" data-nullable min="1" max="42"><div class="hint">列車の時刻の下に到着時刻を出す駅。空欄なら出さない</div></div>
+      <div class="field"><label for="t-min">到着まで何分以上の列車を出すか</label><input type="number" id="t-min" data-key="trains.min_minutes_until" min="0" max="60"></div>
+      <div class="field"><label for="t-max">各方面の最大本数</label><input type="number" id="t-max" data-key="trains.max_trains_per_direction" min="1" max="6"></div>
+      <div class="field"><label for="t-force">見合わせ時の画面を強制表示</label><label class="switch"><input type="checkbox" id="t-force" data-key="trains.force_suspended"><span></span></label><div class="hint">見た目の確認用。確認が終わったら必ずオフに戻す</div></div>
 
-        <h3>機能</h3>
-        <div class="cfg-row">
-            <div class="cfg-label">列車情報</div>
-            <div class="cfg-control">
-                <label class="toggle"><input type="checkbox" id="feat-trains" onchange="onFeatureChange()"><span class="toggle-slider"></span></label>
-            </div>
-        </div>
-        <div class="cfg-row">
-            <div class="cfg-label">バス情報</div>
-            <div class="cfg-control">
-                <label class="toggle"><input type="checkbox" id="feat-buses" onchange="onFeatureChange()"><span class="toggle-slider"></span></label>
-            </div>
-        </div>
-        <div class="cfg-row">
-            <div class="cfg-label">遅延情報</div>
-            <div class="cfg-control">
-                <label class="toggle"><input type="checkbox" id="feat-delays" onchange="onFeatureChange()"><span class="toggle-slider"></span></label>
-            </div>
-        </div>
+      <div class="group-title">バス</div>
+      <div class="field"><label for="b-stop">バス停の名前</label><input type="text" id="b-stop" data-key="buses.stop_name"></div>
+      <div class="field"><label for="b-numbers">のりば番号</label><input type="text" id="b-numbers" data-key="buses.stop_numbers" data-list placeholder="1, 2"><div class="hint">複数あるときは「,」で区切る</div></div>
 
-        <h3>列車設定</h3>
-        <div id="trains-section">
-            <div class="cfg-row">
-                <div class="cfg-label">
-                    駅番号
-                    <div class="cfg-hint">例: 18 = 香里園 KH18</div>
-                </div>
-                <div class="cfg-control">
-                    <input type="number" id="train-station-id" min="1" max="999" style="width:90px">
-                </div>
-            </div>
-            <div class="cfg-row">
-                <div class="cfg-label">
-                    非表示の閾値
-                    <div class="cfg-hint">これ未満の列車を非表示</div>
-                </div>
-                <div class="cfg-control">
-                    <div class="slider-wrap">
-                        <input type="range" id="train-min-min" min="0" max="60" step="1" oninput="syncSlider('train-min-min','train-min-min-val','分')">
-                        <span class="slider-val" id="train-min-min-val">—分</span>
-                    </div>
-                </div>
-            </div>
-            <div class="cfg-row">
-                <div class="cfg-label">
-                    最大表示本数
-                    <div class="cfg-hint">上り・下りそれぞれ</div>
-                </div>
-                <div class="cfg-control">
-                    <div class="stepper">
-                        <button class="step-btn" onclick="step('train-max-dir',-1,1,20)">−</button>
-                        <span class="step-val" id="train-max-dir">6</span>
-                        <button class="step-btn" onclick="step('train-max-dir',+1,1,20)">＋</button>
-                    </div>
-                    <span style="font-size:0.82rem;color:var(--tx-sec)">本</span>
-                </div>
-            </div>
-        </div>
+      <div class="group-title">取得の間隔（秒）</div>
+      <div class="field"><label for="i-train">列車</label><input type="number" id="i-train" data-key="intervals.train_seconds" min="30" max="600"></div>
+      <div class="field"><label for="i-bus">バス</label><input type="number" id="i-bus" data-key="intervals.bus_seconds" min="30" max="600"></div>
+      <div class="field"><label for="i-delay">運行情報</label><input type="number" id="i-delay" data-key="intervals.delay_seconds" min="60" max="3600"></div>
 
-        <h3>バス設定</h3>
-        <div id="buses-section">
-            <div class="cfg-row">
-                <div class="cfg-label">バス停名</div>
-                <div class="cfg-control">
-                    <input type="text" id="bus-stop-name" style="flex:1">
-                </div>
-            </div>
-            <div class="cfg-row">
-                <div class="cfg-label">
-                    のりば番号
-                    <div class="cfg-hint">取得する番号を追加</div>
-                </div>
-                <div class="cfg-control" style="flex-direction:column;align-items:flex-start;gap:0.5rem">
-                    <div class="chips-wrap" id="bus-stop-chips"></div>
-                    <div class="chip-add">
-                        <input type="number" id="bus-stop-new" min="1" max="99" placeholder="番号">
-                        <button onclick="addBusStop()">＋ 追加</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+      <div class="savebar needs-auth"><button class="btn primary" type="submit" id="save-config" disabled>保存して反映</button><button class="btn" type="button" id="reset-config" disabled>元に戻す</button><span class="msg" id="config-msg" role="status"></span></div>
+    </form>
+    <details id="raw-details"><summary>設定ファイルを直接編集する</summary>
+      <p class="note">上の欄にない項目（見合わせ判定の基準、運行情報の取得先など）はここで変えます。項目の意味は config.yml.example にあります。</p>
+      <textarea id="raw-config" spellcheck="false" aria-label="config.yml"></textarea>
+      <div class="savebar needs-auth"><button class="btn primary" type="button" id="save-raw">保存して反映</button><span class="msg" id="raw-msg" role="status"></span></div>
+    </details>
+  </section>
+</div>
+</main>
 
-        <h3>遅延情報</h3>
-        <div id="delays-section">
-            <div class="cfg-row">
-                <div class="cfg-label">データソース</div>
-                <div class="cfg-control">
-                    <div class="seg-ctrl">
-                        <button class="seg-btn active" id="src-yahoo"   onclick="setDelaySource('yahoo')">Yahoo! 路線</button>
-                        <button class="seg-btn"         id="src-ekispert" onclick="setDelaySource('ekispert')">駅すぱあと</button>
-                    </div>
-                </div>
-            </div>
-            <div class="warn-note" id="ekispert-warn" style="display:none">
-                ⚠ 駅すぱあとを使用するには .env に <strong>EKISPERT_API_KEY</strong> が必要です
-            </div>
-            <div class="cfg-row">
-                <div class="cfg-label">
-                    AI整形
-                    <div class="cfg-hint">Gemini で文章を整形</div>
-                </div>
-                <div class="cfg-control">
-                    <label class="toggle"><input type="checkbox" id="delay-use-ai"><span class="toggle-slider"></span></label>
-                </div>
-            </div>
-            <div class="warn-note info" id="ai-warn" style="display:none">
-                ℹ AI整形には .env に <strong>GOOGLE_API_KEY</strong> が必要です
-            </div>
-        </div>
+<script>
+const MODE_LABEL={transit:'交通情報',clock:'時計'};
+const $=id=>document.getElementById(id);
+let token=localStorage.getItem('admin_token')||'';
+let authed=false, modeStatus=null, schedule={default_mode:'transit',rules:[]}, loadedConfig={};
 
-        <h3>更新間隔</h3>
-        <div class="cfg-row">
-            <div class="cfg-label">列車データ</div>
-            <div class="cfg-control">
-                <div class="slider-wrap">
-                    <input type="range" id="iv-train" min="15" max="300" step="15" oninput="syncSlider('iv-train','iv-train-val','秒')">
-                    <span class="slider-val" id="iv-train-val">—秒</span>
-                </div>
-            </div>
-        </div>
-        <div class="cfg-row">
-            <div class="cfg-label">バスデータ</div>
-            <div class="cfg-control">
-                <div class="slider-wrap">
-                    <input type="range" id="iv-bus" min="15" max="300" step="15" oninput="syncSlider('iv-bus','iv-bus-val','秒')">
-                    <span class="slider-val" id="iv-bus-val">—秒</span>
-                </div>
-            </div>
-        </div>
-        <div class="cfg-row">
-            <div class="cfg-label">遅延情報</div>
-            <div class="cfg-control">
-                <div class="slider-wrap">
-                    <input type="range" id="iv-delay" min="60" max="3600" step="60" oninput="syncSlider('iv-delay','iv-delay-val','秒')">
-                    <span class="slider-val" id="iv-delay-val">—秒</span>
-                </div>
-            </div>
-        </div>
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function hm(iso){return iso?new Date(iso).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'—';}
+function hms(iso){return iso?new Date(iso).toLocaleTimeString('ja-JP'):'—';}
+function ago(iso){
+  if(!iso)return '';
+  const s=Math.max(0,Math.round((Date.now()-new Date(iso))/1000));
+  if(s<60)return `${s}秒前`;
+  if(s<3600)return `${Math.floor(s/60)}分前`;
+  return `${Math.floor(s/3600)}時間${Math.floor(s%3600/60)}分前`;
+}
+function flash(id,text,ok){const el=$(id);el.textContent=text;el.className='msg '+(ok?'ok':'err');clearTimeout(el._t);el._t=setTimeout(()=>{el.textContent='';},5000);}
+async function api(method,url,body,isText){
+  const headers={Authorization:`Bearer ${token}`};
+  if(body!==undefined&&!isText)headers['Content-Type']='application/json';
+  const res=await fetch(url,{method,headers,body:body===undefined?undefined:isText?body:JSON.stringify(body)});
+  if(res.status===401){setAuthed(false);throw new Error('ログインし直してください');}
+  if(!res.ok){let detail=res.status;try{detail=(await res.json()).detail||detail;}catch{}throw new Error(`失敗しました（${detail}）`);}
+  return res.status===204?null:res.json();
+}
 
-        <div class="cfg-save-bar">
-            <button class="save-btn" onclick="saveConfig()">保存・即時反映</button>
-            <span id="cfg-msg" style="font-size:0.85rem;min-height:1.2em"></span>
-        </div>
-    </div>
+/* ログイン */
+function setAuthed(value){
+  authed=value;
+  document.body.classList.toggle('locked',!value);
+  $('login-card').hidden=value;
+  $('auth-state').innerHTML=value?'ログイン中 <button class="btn small" id="logout">ログアウト</button>':'';
+  if(value)$('logout').onclick=()=>{token='';localStorage.removeItem('admin_token');setAuthed(false);};
+  for(const el of document.querySelectorAll('.needs-auth button,.needs-auth select,.needs-auth input,select.needs-auth,#config-form input,#raw-config'))el.disabled=!value;
+  updateDirty();
+  renderRules();
+}
+async function checkAuth(){
+  if(!token){setAuthed(false);return;}
+  const res=await fetch('/api/auth',{method:'POST',headers:{Authorization:`Bearer ${token}`}}).catch(()=>null);
+  setAuthed(!!res&&res.status===204);
+}
+$('login-form').onsubmit=async e=>{
+  e.preventDefault();
+  token=$('token').value.trim();
+  await checkAuth();
+  if(authed){localStorage.setItem('admin_token',token);$('token').value='';}
+  else flash('login-msg','パスワードが違います',false);
+};
 
-    <script>
-        const MODE_LABELS = { transit: '電車・バス情報', clock: '大時計' };
+/* いまの表示 */
+function applyMode(s){
+  modeStatus=s;
+  $('mode-name').textContent=MODE_LABEL[s.mode]||s.mode;
+  $('mode-source').textContent=s.source==='manual'?`手動で切り替え中（${hm(s.override_until)}まで。その後は予定どおり）`:'予定どおり';
+  $('back-to-schedule').hidden=s.source!=='manual';
+  for(const id of ['to-transit','to-clock']){const b=$(id);b.classList.toggle('primary',b.dataset.mode===s.mode&&s.source==='manual');}
+  const src=s.mode==='clock'?'/clock/':'/transit/?motion=off';
+  if($('preview-frame').dataset.src!==src){$('preview-frame').dataset.src=src;$('preview-frame').src=src;}
+  $('preview-note').textContent=s.mode==='clock'?'':'端末と同じ画面を縮小して表示';
+  renderTimeline();
+}
+function fitPreview(){const w=$('preview').clientWidth;$('preview-frame').style.transform=`scale(${w/1920})`;}
+new ResizeObserver(fitPreview).observe($('preview'));
+for(const id of ['to-transit','to-clock'])$(id).onclick=async()=>{
+  try{applyMode(await api('POST','/api/mode',{mode:$(id).dataset.mode,override_minutes:+$('override-minutes').value}));flash('mode-msg','切り替えました',true);}
+  catch(e){flash('mode-msg',e.message,false);}
+};
+$('back-to-schedule').onclick=async()=>{
+  try{applyMode(await api('DELETE','/api/mode/override'));flash('mode-msg','予定どおりに戻しました',true);}
+  catch(e){flash('mode-msg',e.message,false);}
+};
+function connectModeStream(){
+  const events=new EventSource('/api/mode/stream?client=admin');
+  events.onmessage=e=>applyMode(JSON.parse(e.data));
+}
 
-        /* ── 認証 ── */
-        function getToken() { return localStorage.getItem('admin_token') || ''; }
-        function saveToken() {
-            localStorage.setItem('admin_token', document.getElementById('token').value);
-            showMsg('トークンを保存しました', true);
-        }
+/* 切り替えの予定 */
+function sortedRules(){return (schedule.rules||[]).map((r,i)=>({...r,i})).sort((a,b)=>a.time.localeCompare(b.time));}
+function minutesOf(t){const [h,m]=t.split(':').map(Number);return h*60+m;}
+function renderTimeline(){
+  const tl=$('timeline');tl.replaceChildren();
+  const points=[{time:'00:00',mode:schedule.default_mode||'transit'},...sortedRules()].filter((p,i,all)=>i===0||p.mode!==all[i-1].mode);
+  points.forEach((p,i)=>{
+    const start=minutesOf(p.time),end=i+1<points.length?minutesOf(points[i+1].time):1440;
+    if(end<=start)return;
+    const seg=document.createElement('div');seg.className='seg '+p.mode;seg.style.width=(end-start)/14.4+'%';
+    seg.textContent=(end-start)>=120?MODE_LABEL[p.mode]:'';seg.title=`${p.time}〜 ${MODE_LABEL[p.mode]}`;tl.append(seg);
+  });
+  const now=new Date(),mark=document.createElement('div');mark.className='now';
+  mark.style.left=((now.getHours()*60+now.getMinutes())/14.4)+'%';tl.append(mark);
+}
+function renderRules(){
+  const body=$('rules');body.replaceChildren();
+  const rules=sortedRules();
+  if(!rules.length)body.innerHTML='<tr><td colspan="3" style="color:var(--dim)">予定はありません</td></tr>';
+  for(const r of rules){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${esc(r.time)}</td><td>${esc(MODE_LABEL[r.mode]||r.mode)}</td><td><button class="btn small danger" ${authed?'':'disabled'}>削除</button></td>`;
+    tr.querySelector('button').onclick=()=>{schedule.rules.splice(r.i,1);saveSchedule('削除しました');};
+    body.append(tr);
+  }
+  $('default-mode').value=schedule.default_mode||'transit';
+  renderTimeline();
+}
+async function saveSchedule(done){
+  try{schedule=await api('PUT','/api/schedule',schedule);renderRules();flash('schedule-msg',done,true);}
+  catch(e){flash('schedule-msg',e.message,false);loadSchedule();}
+}
+async function loadSchedule(){schedule=await (await fetch('/api/schedule')).json();schedule.rules=schedule.rules||[];renderRules();}
+$('add-rule').onclick=()=>{
+  const time=$('rule-time').value;if(!time)return;
+  schedule.rules=schedule.rules.filter(r=>r.time!==time);
+  schedule.rules.push({time,mode:$('rule-mode').value});
+  saveSchedule('追加しました');
+};
+$('default-mode').onchange=()=>{schedule.default_mode=$('default-mode').value;saveSchedule('変更しました');};
 
-        function showMsg(text, ok, id = 'msg') {
-            const el = document.getElementById(id);
-            el.textContent = text;
-            el.className = ok ? 'ok' : 'err';
-            setTimeout(() => el.textContent = '', 4000);
-        }
+/* 動作状況 */
+function row(state,name,main,detail,detailState){
+  return `<div class="status-row"><span class="dot ${state}"></span><span class="name">${esc(name)}</span><span class="main">${esc(main)}</span>${detail?`<span class="detail ${detailState||''}">${esc(detail)}</span>`:''}</div>`;
+}
+function late(part){return part.last_success&&part.interval_seconds&&(Date.now()-new Date(part.last_success))/1000>part.interval_seconds*3+30;}
+function sourceRow(name,part,okText){
+  if(!part.enabled)return {state:'off',html:row('off',name,'表示しない設定です')};
+  const when=part.last_success?`最後に取得 ${hms(part.last_success)}（${ago(part.last_success)}）`:'';
+  if(part.error&&name==='列車位置')return {state:'bad',html:row('bad',name,'列車の表示を止めています',part.error,'bad')};
+  if(!part.last_success)return {state:'warn',html:row('warn',name,'まだ取得できていません',part.error||'',part.error?'warn':'')};
+  if(part.error)return {state:'warn',html:row('warn',name,'一部を取得できていません',`${part.error}\n${when}`,'warn')};
+  if(late(part))return {state:'warn',html:row('warn',name,'取得が遅れています',when,'warn')};
+  return {state:'ok',html:row('ok',name,okText,when)};
+}
+async function refreshStatus(){
+  let status=null,displays=null;
+  try{const r=await fetch('/transit/api/status',{cache:'no-store'});if(r.ok)status=await r.json();}catch{}
+  try{const r=await fetch('/api/displays',{cache:'no-store'});if(r.ok)displays=await r.json();}catch{}
+  const parts=[];
+  if(displays)parts.push(displays.count?{state:'ok',html:row('ok','表示端末',`${displays.count}台が表示中`,`いちばん長い端末は ${hm(displays.connected_since[0])} から接続`)}:{state:'off',html:row('off','表示端末','表示している端末はありません','端末の電源が切れているか、ブラウザが閉じています')});
+  if(!status){
+    parts.push({state:'bad',html:row('bad','交通情報','サーバー（transit）が応答しません','サイネージには再接続中の画面が出ます','bad')});
+  }else{
+    const t=status.trains;
+    parts.push(sourceRow('列車位置',t,`正常（走っている列車 ${t.active}本）`));
+    if(t.enabled){
+      const ratio=t.unreliable_ratio==null?'':`推定を出せない列車の割合 ${Math.round(t.unreliable_ratio*100)}%`;
+      parts.push(t.suspended?{state:'warn',html:row('warn','京阪の表示',t.forced?'見合わせ時の画面（強制表示中）':'見合わせ時の画面を表示中',t.forced?'設定の「見合わせ時の画面を強制表示」をオフにすると戻ります':ratio,'warn')}:{state:'ok',html:row('ok','京阪の表示','通常の画面',ratio)});
+    }
+    parts.push(sourceRow('バス',status.buses,`正常（${status.buses.count}件）`));
+    parts.push(sourceRow('運行情報',status.delays,status.delays.affected?`正常（影響のある路線 ${status.delays.affected}）`:'正常（影響のある路線なし）'));
+  }
+  $('status-list').innerHTML=parts.map(p=>p.html).join('');
+  const worst=parts.some(p=>p.state==='bad')?'bad':parts.some(p=>p.state==='warn')?'warn':'ok';
+  $('overall').querySelector('.dot').className='dot '+worst;
+  $('overall-text').textContent={ok:'正常に動いています',warn:'確認が必要な項目があります',bad:'表示に問題があります'}[worst];
+  $('status-checked').textContent=`${new Date().toLocaleTimeString('ja-JP')} 時点`;
+}
 
-        /* ── モード ── */
-        function formatTime(iso) {
-            return new Date(iso).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
-        }
+/* 設定 */
+function getPath(obj,key){return key.split('.').reduce((o,k)=>o?.[k],obj);}
+function setPath(obj,key,value){const keys=key.split('.');let o=obj;for(const k of keys.slice(0,-1))o=o[k]=(o[k]&&typeof o[k]==='object')?o[k]:{};o[keys.at(-1)]=value;}
+function current(el){
+  const v=getPath(loadedConfig,el.dataset.key);
+  if(v!==undefined)return v;
+  if(el.dataset.key.startsWith('features.'))return true;
+  return el.type==='checkbox'?false:el.hasAttribute('data-nullable')?null:undefined;
+}
+function fields(){return [...document.querySelectorAll('#config-form [data-key]')];}
+function fieldValue(el){
+  if(el.type==='checkbox')return el.checked;
+  if(el.hasAttribute('data-list'))return el.value.split(/[,、\s]+/).filter(Boolean).map(v=>/^\d+$/.test(v)?Number(v):v);
+  if(el.type==='number')return el.value===''?(el.hasAttribute('data-nullable')?null:undefined):Number(el.value);
+  return el.value.trim();
+}
+function showValue(el,v){
+  if(el.type==='checkbox')el.checked=!!v;
+  else if(el.hasAttribute('data-list'))el.value=(v||[]).join(', ');
+  else el.value=v??'';
+}
+function formConfig(){
+  const cfg=structuredClone(loadedConfig);
+  for(const el of fields()){const v=fieldValue(el);if(v!==undefined)setPath(cfg,el.dataset.key,v);}
+  return cfg;
+}
+function updateDirty(){
+  const dirty=fields().some(el=>JSON.stringify(fieldValue(el))!==JSON.stringify(current(el)));
+  $('save-config').disabled=!authed||!dirty;$('reset-config').disabled=!authed||!dirty;
+}
+async function loadConfig(){
+  const [json,raw]=await Promise.all([fetch('/api/config/json',{cache:'no-store'}).then(r=>r.json()),fetch('/api/config',{cache:'no-store'}).then(r=>r.text())]);
+  loadedConfig=json||{};
+  for(const el of fields())showValue(el,current(el));
+  $('raw-config').value=raw;
+  updateDirty();
+}
+$('config-form').addEventListener('input',updateDirty);
+$('config-form').addEventListener('change',updateDirty);
+$('reset-config').onclick=()=>{loadConfig();};
+$('config-form').onsubmit=async e=>{
+  e.preventDefault();
+  for(const el of fields())if(!el.checkValidity()){el.reportValidity();return;}
+  try{const r=await api('PUT','/api/config/json',formConfig());await loadConfig();flash('config-msg',r.reloaded?'保存して反映しました':'保存しました（反映は次の取得から）',true);setTimeout(refreshStatus,1500);}
+  catch(err){flash('config-msg',err.message,false);}
+};
+$('save-raw').onclick=async()=>{
+  try{const r=await api('PUT','/api/config',$('raw-config').value,true);await loadConfig();flash('raw-msg',r.reloaded?'保存して反映しました':'保存しました（反映は次の取得から）',true);}
+  catch(err){flash('raw-msg',err.message,false);}
+};
 
-        function applyStatus(s) {
-            const modeBadge    = document.getElementById('mode-badge');
-            const sourceBadge  = document.getElementById('source-badge');
-            const overrideNote = document.getElementById('override-note');
-            const schedBtn     = document.getElementById('sched-btn');
-            modeBadge.className = `badge ${s.mode}`;
-            modeBadge.innerHTML = `<span class="dot"></span>${MODE_LABELS[s.mode] ?? s.mode}`;
-            document.getElementById('btn-transit').className = s.mode === 'transit' ? 'active-transit' : '';
-            document.getElementById('btn-clock').className   = s.mode === 'clock'   ? 'active-clock' : '';
-            if (s.source === 'manual') {
-                sourceBadge.className = 'badge manual'; sourceBadge.textContent = '手動上書き';
-                overrideNote.style.display = '';
-                document.getElementById('override-until').textContent = formatTime(s.override_until);
-                schedBtn.style.display = '';
-            } else {
-                sourceBadge.className = 'badge schedule'; sourceBadge.textContent = 'スケジュール';
-                overrideNote.style.display = 'none'; schedBtn.style.display = 'none';
-            }
-        }
-
-        async function switchMode(mode) {
-            const minutes = document.getElementById('override-minutes').value;
-            const res = await fetch('/api/mode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-                body: JSON.stringify({ mode, override_minutes: parseInt(minutes) })
-            });
-            if (res.ok) { applyStatus(await res.json()); showMsg('切り替えました', true); }
-            else showMsg('エラー: トークンを確認してください', false);
-        }
-
-        async function returnToSchedule() {
-            const res = await fetch('/api/mode/override', {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${getToken()}` }
-            });
-            if (res.ok) { applyStatus(await res.json()); showMsg('スケジュールに戻しました', true); }
-            else showMsg('エラー: トークンを確認してください', false);
-        }
-
-        fetch('/api/mode').then(r => r.json()).then(applyStatus);
-        const es = new EventSource('/api/mode/stream');
-        es.onmessage = e => applyStatus(JSON.parse(e.data));
-
-        /* ── スケジュール ── */
-        let scheduleData = { default_mode: 'transit', rules: [] };
-
-        async function loadSchedule() {
-            const res = await fetch('/api/schedule');
-            scheduleData = await res.json();
-            document.getElementById('default-mode').value = scheduleData.default_mode || 'transit';
-            renderSchedule();
-        }
-
-        function renderSchedule() {
-            const tbody = document.getElementById('schedule-body');
-            tbody.innerHTML = '';
-            const rules = (scheduleData.rules || []).slice().sort((a, b) => a.time.localeCompare(b.time));
-            rules.forEach((r, i) => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${r.time}</td><td>${MODE_LABELS[r.mode] ?? r.mode}</td>
-                    <td><button class="del-btn" onclick="deleteRule(${i})">削除</button></td>`;
-                tbody.appendChild(tr);
-            });
-            if (!rules.length)
-                tbody.innerHTML = `<tr><td colspan="3" style="color:var(--tx-sec);font-size:0.85rem">スケジュールなし</td></tr>`;
-        }
-
-        async function saveSchedule() {
-            scheduleData.default_mode = document.getElementById('default-mode').value;
-            const res = await fetch('/api/schedule', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-                body: JSON.stringify(scheduleData)
-            });
-            if (res.ok) showMsg('スケジュールを保存しました', true);
-            else showMsg('エラー: トークンを確認してください', false);
-        }
-
-        function addRule() {
-            const time = document.getElementById('new-time').value;
-            const mode = document.getElementById('new-mode').value;
-            if (!time) { showMsg('時刻を入力してください', false); return; }
-            scheduleData.rules = scheduleData.rules || [];
-            scheduleData.rules.push({ time, mode });
-            renderSchedule(); saveSchedule();
-        }
-
-        function deleteRule(i) {
-            const sorted = (scheduleData.rules || []).slice().sort((a, b) => a.time.localeCompare(b.time));
-            const target = sorted[i];
-            scheduleData.rules = scheduleData.rules.filter(r => !(r.time === target.time && r.mode === target.mode));
-            renderSchedule(); saveSchedule();
-        }
-
-        document.getElementById('default-mode').addEventListener('change', saveSchedule);
-
-        /* ── Config form helpers ── */
-        let currentTheme = 'dark';
-        let busStopNumbers = [];
-        let delaySource = 'yahoo';
-
-        function setTheme(btn) {
-            document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentTheme = btn.dataset.theme;
-        }
-
-        function setDelaySource(src) {
-            delaySource = src;
-            document.getElementById('src-yahoo').classList.toggle('active', src === 'yahoo');
-            document.getElementById('src-ekispert').classList.toggle('active', src === 'ekispert');
-            document.getElementById('ekispert-warn').style.display = src === 'ekispert' ? '' : 'none';
-        }
-
-        document.getElementById('delay-use-ai').addEventListener('change', function() {
-            document.getElementById('ai-warn').style.display = this.checked ? '' : 'none';
-        });
-
-        function onFeatureChange() {
-            const trains = document.getElementById('feat-trains').checked;
-            const buses  = document.getElementById('feat-buses').checked;
-            const delays = document.getElementById('feat-delays').checked;
-            document.getElementById('trains-section').closest('.card') || document; // no-op
-            setSection('trains-section', trains);
-            setSection('buses-section', buses);
-            setSection('delays-section', delays);
-        }
-
-        function setSection(id, enabled) {
-            const el = document.getElementById(id);
-            if (enabled) el.removeAttribute('style');
-            else el.style.opacity = '0.35';
-        }
-
-        function syncSlider(rangeId, valId, unit) {
-            const v = document.getElementById(rangeId).value;
-            const sec = parseInt(v);
-            let label = `${sec}${unit}`;
-            if (unit === '秒' && sec >= 60 && sec % 60 === 0) label += ` (${sec/60}分)`;
-            document.getElementById(valId).textContent = label;
-        }
-
-        function step(id, delta, min, max) {
-            const el = document.getElementById(id);
-            const v = Math.min(max, Math.max(min, parseInt(el.textContent) + delta));
-            el.textContent = v;
-        }
-
-        function addBusStop() {
-            const input = document.getElementById('bus-stop-new');
-            const num = parseInt(input.value);
-            if (isNaN(num) || num < 1) { return; }
-            if (!busStopNumbers.includes(num)) {
-                busStopNumbers.push(num);
-                busStopNumbers.sort((a, b) => a - b);
-                renderBusChips();
-            }
-            input.value = '';
-        }
-
-        document.getElementById('bus-stop-new').addEventListener('keydown', e => {
-            if (e.key === 'Enter') addBusStop();
-        });
-
-        function removeBusStop(num) {
-            busStopNumbers = busStopNumbers.filter(n => n !== num);
-            renderBusChips();
-        }
-
-        function renderBusChips() {
-            const wrap = document.getElementById('bus-stop-chips');
-            wrap.innerHTML = '';
-            busStopNumbers.forEach(n => {
-                const chip = document.createElement('span');
-                chip.className = 'chip';
-                chip.innerHTML = `${n}番のりば <span class="chip-del" onclick="removeBusStop(${n})">✕</span>`;
-                wrap.appendChild(chip);
-            });
-            if (!busStopNumbers.length) {
-                wrap.innerHTML = `<span style="font-size:0.8rem;color:var(--tx-sec)">のりば未設定</span>`;
-            }
-        }
-
-        /* ── Config load ── */
-        async function loadConfig() {
-            const res = await fetch('/api/config/json');
-            if (!res.ok) { showMsg('config.yml を読み込めませんでした', false, 'cfg-msg'); return; }
-            const c = await res.json();
-
-            currentTheme = c.design?.theme ?? 'dark';
-            document.querySelectorAll('.theme-btn').forEach(b => {
-                b.classList.toggle('active', b.dataset.theme === currentTheme);
-            });
-
-            document.getElementById('feat-trains').checked = c.features?.trains ?? true;
-            document.getElementById('feat-buses').checked  = c.features?.buses  ?? true;
-            document.getElementById('feat-delays').checked = c.features?.delays ?? true;
-            onFeatureChange();
-
-            document.getElementById('train-station-id').value = c.trains?.station_id ?? 18;
-            setSlider('train-min-min', c.trains?.min_minutes_until ?? 20, 'train-min-min-val', '分');
-            document.getElementById('train-max-dir').textContent = c.trains?.max_trains_per_direction ?? 6;
-
-            document.getElementById('bus-stop-name').value = c.buses?.stop_name ?? '';
-            busStopNumbers = [...(c.buses?.stop_numbers ?? [])].map(Number).sort((a,b)=>a-b);
-            renderBusChips();
-
-            setDelaySource(c.delays?.source ?? 'yahoo');
-            const useAi = c.delays?.use_ai ?? false;
-            document.getElementById('delay-use-ai').checked = useAi;
-            document.getElementById('ai-warn').style.display = useAi ? '' : 'none';
-
-            setSlider('iv-train', c.intervals?.train_seconds ?? 60, 'iv-train-val', '秒');
-            setSlider('iv-bus',   c.intervals?.bus_seconds   ?? 60, 'iv-bus-val',   '秒');
-            setSlider('iv-delay', c.intervals?.delay_seconds ?? 600,'iv-delay-val', '秒');
-        }
-
-        function setSlider(rangeId, value, valId, unit) {
-            const el = document.getElementById(rangeId);
-            el.value = value;
-            syncSlider(rangeId, valId, unit);
-        }
-
-        /* ── Config save ── */
-        function buildYaml() {
-            const stationId    = parseInt(document.getElementById('train-station-id').value) || 18;
-            const minMin       = parseInt(document.getElementById('train-min-min').value) || 0;
-            const maxDir       = parseInt(document.getElementById('train-max-dir').textContent) || 6;
-            const stopName     = document.getElementById('bus-stop-name').value.trim() || '未設定';
-            const stopNums     = busStopNumbers.length ? busStopNumbers.map(n => `    - ${n}`).join('\n') : '    - 1';
-            const ivTrain      = parseInt(document.getElementById('iv-train').value);
-            const ivBus        = parseInt(document.getElementById('iv-bus').value);
-            const ivDelay      = parseInt(document.getElementById('iv-delay').value);
-            const featTrains   = document.getElementById('feat-trains').checked;
-            const featBuses    = document.getElementById('feat-buses').checked;
-            const featDelays   = document.getElementById('feat-delays').checked;
-            const useAi        = document.getElementById('delay-use-ai').checked;
-
-            return `# ============================================================
-# アプリ設定ファイル
-# ============================================================
-
-design:
-  theme: "${currentTheme}"
-
-features:
-  trains: ${featTrains}
-  buses: ${featBuses}
-  delays: ${featDelays}
-
-trains:
-  station_id: ${stationId}
-  min_minutes_until: ${minMin}
-  max_trains_per_direction: ${maxDir}
-
-buses:
-  stop_name: "${stopName}"
-  stop_numbers:
-${stopNums}
-
-delays:
-  source: "${delaySource}"
-  use_ai: ${useAi}
-
-intervals:
-  train_seconds: ${ivTrain}
-  bus_seconds: ${ivBus}
-  delay_seconds: ${ivDelay}
-`;
-        }
-
-        function validateConfig() {
-            const stationId = parseInt(document.getElementById('train-station-id').value);
-            if (isNaN(stationId) || stationId < 1) return '駅番号を正しく入力してください';
-            if (busStopNumbers.length === 0 && document.getElementById('feat-buses').checked)
-                return 'バス機能が有効ですが、のりば番号が未設定です';
-            const ivTrain = parseInt(document.getElementById('iv-train').value);
-            const ivBus   = parseInt(document.getElementById('iv-bus').value);
-            if (ivTrain < 30 || ivBus < 30)
-                return '更新間隔が短すぎます（API に負荷をかける可能性があります）';
-            return null;
-        }
-
-        async function saveConfig() {
-            const err = validateConfig();
-            if (err) { showMsg(err, false, 'cfg-msg'); return; }
-
-            const yaml = buildYaml();
-            const res = await fetch('/api/config', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Authorization': `Bearer ${getToken()}` },
-                body: yaml
-            });
-            if (res.ok) {
-                const j = await res.json();
-                showMsg(j.reloaded ? '保存・即時反映しました' : '保存しました（transit 未接続 — 再起動で反映）', j.reloaded, 'cfg-msg');
-            } else {
-                const j = await res.json().catch(() => ({ detail: 'エラー' }));
-                showMsg(j.detail || 'エラー', false, 'cfg-msg');
-            }
-        }
-
-        /* ── 初期化 ── */
-        document.getElementById('token').value = getToken();
-        loadSchedule();
-        loadConfig();
-    </script>
+fetch('/api/mode').then(r=>r.json()).then(applyMode);
+connectModeStream();
+loadSchedule();
+loadConfig();
+checkAuth();
+refreshStatus();
+setInterval(refreshStatus,15000);
+setInterval(renderTimeline,60000);
+</script>
 </body>
 </html>

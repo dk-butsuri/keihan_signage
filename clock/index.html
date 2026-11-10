@@ -4,68 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>時計</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&family=Noto+Sans+JP:wght@700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400&display=swap">
     <style>
-        :root {
-            --bg:    #020509;
-            --tx:    #FFFFFF;
-            --tx-sec:#99BBDD;
-            --blue:  #3A7FFF;
+        html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0B0B0C; }
+        #screen {
+            position: absolute; left: 50%; top: 50%;
+            width: 1920px; height: 1080px; box-sizing: border-box;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 48px;
+            color: #F1F1EE; font-family: 'Zen Kaku Gothic New', sans-serif; font-variant-numeric: tabular-nums;
+            transform-origin: center;
         }
-        *, *::before, *::after { box-sizing: border-box; }
-        html, body {
-            height: 100%; margin: 0; padding: 0;
-            background: var(--bg);
-            color: var(--tx);
-            overflow: hidden;
-        }
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 2vh;
-        }
-        .time {
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 700;
-            font-size: clamp(4rem, 18vw, 20rem);
-            line-height: 1;
-            letter-spacing: -0.02em;
-            font-variant-numeric: tabular-nums;
-            color: var(--tx);
-            text-shadow: 0 0 40px rgba(58,127,255,0.4);
-            padding: 0 5vw;
-        }
-        .date {
-            font-family: 'Noto Sans JP', sans-serif;
-            font-weight: 700;
-            font-size: 4vw;
-            color: var(--tx-sec);
-            letter-spacing: 0.1em;
-        }
+        .time-row { display: flex; align-items: baseline; gap: 16px; line-height: 0.9; }
+        #time { font-size: 400px; font-weight: 300; }
+        #seconds { font-size: 140px; font-weight: 300; color: #7C7C82; }
+        #time, #seconds { display: inline-flex; white-space: nowrap; }
+        .digit { display: inline-block; width: .58em; text-align: center; }
+        .separator { display: inline-block; width: .22em; text-align: center; }
+        .rule { width: 1280px; height: 1px; background: #26262A; }
+        #date { font-size: 52px; font-weight: 400; color: #A1A1A6; letter-spacing: 0.08em; }
     </style>
 </head>
 <body>
-    <div class="time" id="time">00:00:00</div>
-    <div class="date" id="date"></div>
+    <div id="screen">
+        <div class="time-row"><span id="time"></span><span id="seconds"></span></div>
+        <div class="rule"></div>
+        <div id="date"></div>
+    </div>
     <script>
-        const DAYS = ['日','月','火','水','木','金','土'];
         var offset = 0; // ms: Date.now() + offset = 推定NTP時刻
 
+        function fit() {
+            var scale = Math.min(innerWidth / 1920, innerHeight / 1080);
+            document.getElementById('screen').style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+        }
+
+        function setDigits(element, text) {
+            if (element.childElementCount !== text.length) {
+                element.replaceChildren.apply(element, Array.from(text, function(character) {
+                    var span = document.createElement('span');
+                    span.className = character === ':' ? 'separator' : 'digit';
+                    return span;
+                }));
+            }
+            Array.from(text).forEach(function(character, index) {
+                element.children[index].textContent = character;
+            });
+        }
+
         function tick() {
-            var jst = new Date(Date.now() + offset + 9 * 3600000);
-            var h = String(jst.getUTCHours()).padStart(2,'0');
-            var m = String(jst.getUTCMinutes()).padStart(2,'0');
-            var s = String(jst.getUTCSeconds()).padStart(2,'0');
-            document.getElementById('time').textContent = h + ':' + m + ':' + s;
-            var y = jst.getUTCFullYear();
-            var mo = jst.getUTCMonth() + 1;
-            var d = jst.getUTCDate();
-            var w = DAYS[jst.getUTCDay()];
-            document.getElementById('date').textContent = y + '年' + mo + '月' + d + '日（' + w + '）';
+            var date = new Date(Date.now() + offset);
+            var time = new Intl.DateTimeFormat('ja-JP', {timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'}).format(date);
+            var parts = new Intl.DateTimeFormat('ja-JP', {timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'}).formatToParts(date);
+            var part = function(type) { return parts.find(function(p) { return p.type === type; }).value; };
+            setDigits(document.getElementById('time'), time.slice(0, 5));
+            setDigits(document.getElementById('seconds'), time.slice(5));
+            document.getElementById('date').textContent = part('year') + '.' + part('month') + '.' + part('day') + ' ' + part('weekday');
         }
 
         function schedule() {
@@ -76,7 +69,7 @@
 
         function sampleOnce() {
             var t0 = performance.now();
-            return fetch('/api/time')
+            return fetch('/api/time', {cache: 'no-store'})
                 .then(function(res) {
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     return res.json();
@@ -112,6 +105,8 @@
             });
         }
 
+        addEventListener('resize', fit);
+        fit();
         syncTime();
         setInterval(syncTime, 5 * 60 * 1000);
         tick();

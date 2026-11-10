@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ demo.title }} · 京阪サイネージ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif}main{max-width:1320px;margin:auto;padding:32px 32px 56px}a{color:#D9D9D6}a:hover{text-decoration:none}h1{font-size:32px;line-height:1.4;font-weight:500;margin:24px 0 10px}.intro{color:#A1A1A6;line-height:1.8;margin:0}header nav{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}.choice{display:flex;gap:10px;align-items:center}select,button{font:inherit;min-height:44px;padding:6px 12px;background:#202024;color:#F1F1EE;border:1px solid #4A4A50;border-radius:4px}select{max-width:100%;min-width:0}:focus-visible{outline:2px solid #F1F1EE;outline-offset:3px}.filters{display:flex;flex-wrap:wrap;align-items:center;gap:16px 24px;margin:24px 0}.filters label{display:flex;align-items:center;gap:10px}.pattern-count{color:#A1A1A6}#pattern-loading{color:#A1A1A6;line-height:1.8}#pattern-gallery [hidden]{display:none!important}.pattern-cases{display:flex;flex-direction:column;gap:32px}.pattern-case h2{font-size:20px;line-height:1.5;font-weight:500;margin:0 0 8px}.pattern-note{font-size:14px;line-height:1.8;color:#A1A1A6;margin:0 0 12px}.pattern-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.pattern-sample{min-width:0;max-width:620px;width:100%}.pattern-density{display:block;color:#A1A1A6;font-size:14px;line-height:20px;margin-bottom:8px}.pattern-card{container-type:inline-size;height:116px;display:flex;align-items:center;color:#F1F1EE;font-size:16px;font-weight:400;font-variant-numeric:tabular-nums}.pattern-card>div{width:100%;height:116px!important;margin-top:0!important}.pattern-card>.departure-compact{height:72px!important}#pattern-gallery.single-density .pattern-pair{grid-template-columns:minmax(0,620px)}.pattern-extras{margin-top:40px;border-top:1px solid #26262A;padding-top:24px}.pattern-extras summary{font-size:20px;line-height:1.7;cursor:pointer}.pattern-extras .pattern-cases{margin-top:24px}.pattern-source{position:absolute;left:-10000px;top:0;width:1920px;height:1080px;border:0;visibility:hidden}
+@media(max-width:1160px){.pattern-pair{grid-template-columns:minmax(0,620px);gap:12px}}@media(max-width:680px){main{padding:24px 16px 40px}h1{font-size:27px}.choice{min-width:0;width:100%}.choice select{flex:1}.filters{gap:12px}.pattern-case h2{font-size:17px}.pattern-count{width:100%}}
+@container(max-width:520px){
+ #pattern-gallery .pattern-card>div{gap:8px!important;padding-right:8px!important}
+ #pattern-gallery .train-kind{width:46px}
+ #pattern-gallery .train-kind-ja{font-size:17px;line-height:26px}
+ #pattern-gallery .train-kind-en{font-size:11px;line-height:16px}
+ #pattern-gallery .departure-content{grid-template-columns:60px minmax(0,1fr) 68px;grid-template-rows:36px auto;column-gap:2px}
+ #pattern-gallery .departure-scheduled .departure-content{grid-template-rows:16px 46px 24px}
+ #pattern-gallery .departure-scheduled.departure-single-line .departure-content{grid-template-rows:16px 36px}
+ #pattern-gallery .departure-time{font-size:26px;line-height:36px}
+ #pattern-gallery .departure-compact .departure-content{grid-template-columns:80px minmax(0,1fr) 68px;column-gap:2px}
+ #pattern-gallery .departure-scheduled.departure-compact .departure-content{grid-template-rows:32px}
+ #pattern-gallery .departure-compact .departure-clock{gap:2px}
+ #pattern-gallery .departure-scheduled.departure-compact .departure-clock{transform:translateY(-2px)}
+ #pattern-gallery .departure-time-label{font-size:11px}
+ #pattern-gallery .departure-compact .departure-time{font-size:24px;line-height:32px}
+ #pattern-gallery .departure-destination{font-size:18px;line-height:26px}
+ #pattern-gallery .departure-secondary{font-size:14px;gap:5px}
+ #pattern-gallery .departure-secondary.train-location{font-size:12px}
+ #pattern-gallery .train-location .location-state{font-size:11px;line-height:17px;padding:0 4px}
+ #pattern-gallery .train-location .location-link{width:16px}
+ #pattern-gallery .train-delay-label{font-size:18px}
+ #pattern-gallery .train-delay-number{font-size:24px}
+ #pattern-gallery .train-delay-unit{font-size:12px}
+ #pattern-gallery .departure-delay,#pattern-gallery .departure-compact .departure-delay{font-size:13px}
+ #pattern-gallery .departure-remaining>div:not(.train-delay-metric)>span:first-child,#pattern-gallery .departure-remaining>div:not(.train-delay-metric)>span:last-child{font-size:12px!important}
+ #pattern-gallery .departure-remaining>div:not(.train-delay-metric)>span:nth-child(2){font-size:26px!important}
+ #pattern-gallery .train-delay-metric.is-lower-bound{display:grid;grid-template-columns:auto auto;column-gap:2px;row-gap:0;line-height:20px}
+ #pattern-gallery .train-delay-metric.is-lower-bound .train-delay-label{font-size:11px}
+ #pattern-gallery .train-delay-metric.is-lower-bound .train-delay-number{font-size:20px;line-height:20px}
+ #pattern-gallery .train-delay-metric.is-lower-bound .train-delay-unit{grid-column:2;font-size:11px;line-height:14px}
+ #pattern-gallery .train-stop-badge.is-lower-bound,#pattern-gallery .departure-compact .train-stop-badge.is-lower-bound{font-size:11px;padding:1px 2px}
+ #pattern-gallery .departure-revised .departure-content{grid-template-columns:86px minmax(0,1fr) 68px;column-gap:2px}
+ #pattern-gallery .departure-revised.departure-compact .departure-content{grid-template-columns:86px minmax(0,1fr) 68px;grid-template-rows:auto;column-gap:2px}
+ #pattern-gallery .departure-original{font-size:11px;gap:3px}
+ #pattern-gallery .departure-original-delay{display:none}
+ #pattern-gallery .departure-revised .departure-prediction{gap:3px}
+ #pattern-gallery .departure-revised .departure-time-label{font-size:13px;line-height:18px}
+ #pattern-gallery .departure-revised .departure-time{font-size:24px}
+ #pattern-gallery .departure-revised .departure-time.is-pending{font-size:24px}
+ #pattern-gallery .departure-revised .departure-destination{font-size:17px}
+ #pattern-gallery .departure-revised.departure-compact .departure-time{font-size:24px;line-height:30px}
+ #pattern-gallery .departure-revised.departure-compact .departure-time.is-pending{font-size:21px}
+}
+</style></head><body><main>
+<header><nav><a id="pattern-back" href="/demo">← デモ一覧</a><label class="choice">デモ<select id="pattern-demo" aria-label="デモ選択">
+{% for mode, heading in [('replay', '実際の記録'), ('static', '架空の想定'), ('gallery', '表示の見本')] %}
+<optgroup label="{{ heading }}">{% for item in demos if item.mode == mode %}<option value="{{ item.id }}" {% if item.id == demo.id %}selected{% endif %} {% if not item.available %}disabled{% endif %}>{{ item.title }}</option>{% endfor %}</optgroup>
+{% endfor %}</select></label></nav><h1>{{ demo.title }}</h1><p class="intro">遅延・停止・到着予測の有無による全8通りを、通常表示と圧縮表示で比較できます。数値は見本です。</p></header>
+<div class="filters"><label>表示<select id="pattern-density" aria-label="表示の高さ"><option value="both">通常・圧縮の両方</option><option value="normal">通常のみ</option><option value="compact">圧縮のみ</option></select></label><label>到着予測<select id="pattern-prediction" aria-label="到着予測の有無"><option value="all">すべて</option><option value="yes">あり</option><option value="no">なし</option></select></label><output class="pattern-count" id="pattern-count" aria-live="polite"></output></div>
+<p id="pattern-loading" role="status">見本を読み込んでいます…</p>
+<div id="pattern-gallery" hidden><div id="pattern-basic" class="pattern-cases"></div><details class="pattern-extras" id="pattern-extras"><summary>補足パターン <span id="pattern-extra-count"></span></summary><div id="pattern-extra-cases" class="pattern-cases"></div></details></div>
+<template id="pattern-case-template"><section class="pattern-case"><h2></h2><p class="pattern-note" hidden></p><div class="pattern-pair"><div class="pattern-sample" data-density="normal"><span class="pattern-density">通常表示</span><div class="pattern-card"></div></div><div class="pattern-sample" data-density="compact"><span class="pattern-density">圧縮表示</span><div class="pattern-card"></div></div></div></section></template>
+</main><script>
+const script=document.createElement('script');script.src=location.pathname.replace(/\/$/,'')+'/player.js';
+script.onerror=()=>{document.getElementById('pattern-loading').textContent='見本を読み込めませんでした。再読み込みしてください。';};
+document.body.append(script);
+</script></body></html>

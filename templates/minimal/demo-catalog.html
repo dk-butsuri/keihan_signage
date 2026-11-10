@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>デモを選ぶ · 京阪サイネージ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif;line-height:1.8}main{max-width:1160px;margin:auto;padding:40px 32px 48px}.eyebrow{font-size:15px;color:#A1A1A6;letter-spacing:.12em}h1{margin:12px 0;font-size:36px;font-weight:500;line-height:1.4}header>p{margin:0;color:#A1A1A6;font-size:18px}section{margin-top:32px}h2{font-size:20px;font-weight:500;margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.card{color:inherit;text-decoration:none;display:flex;flex-direction:column;gap:10px;padding:22px 26px;background:#151517;border:1px solid #26262A;border-radius:8px;transition:border-color .15s,background .15s}.card:hover{background:#1B1B1F;border-color:#7C7C82}.card:focus-visible{outline:3px solid #F1F1EE;outline-offset:4px}.tag{align-self:flex-start;font-size:13px;line-height:1.5;border:1px solid #4A4A50;border-radius:4px;padding:2px 8px;color:#A1A1A6}.recorded .tag{border-color:#476480;color:#A7CEE8}.card h3{font-weight:500;font-size:22px;line-height:1.4;margin:0}.card p{font-size:15.5px;line-height:1.6;color:#A1A1A6;margin:0}.open{font-size:14px;line-height:1.5;color:#D9D9D6;margin-top:auto;padding-top:0}.recorded{grid-column:1/-1}.card[aria-disabled=true]{pointer-events:none;opacity:.55}.spec{display:inline-block;margin-top:14px;color:#A7CEE8;font-size:16px;text-decoration:none;border-bottom:1px solid #476480}.spec:hover{color:#F1F1EE;border-color:#F1F1EE}.spec:focus-visible{outline:3px solid #F1F1EE;outline-offset:4px}.note{margin:24px 0 0;color:#7C7C82;font-size:14px}@media(max-width:680px){main{padding:32px 20px 48px}h1{font-size:32px}header>p{font-size:16px}.grid{grid-template-columns:1fr}.card{padding:24px}.card h3{font-size:22px}section{margin-top:32px}}
+</style>
+<style>
+@media(min-width:681px){.catalog-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}.catalog-section.static{grid-column:1/-1}.catalog-section.replay .grid,.catalog-section.gallery .grid{grid-template-columns:1fr}}
+@media(min-width:1200px){main{max-width:1320px}.catalog-sections{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}.catalog-section.gallery .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body><main>
+<header><div class="eyebrow">京阪サイネージ / DEMO</div><h1>デモを選ぶ</h1><p>実際の記録の再生と、状況を想定した表示を試せます。</p><a class="spec" id="spec-link" href="/demo/readme">仕様書を読む →</a></header>
+<div class="catalog-sections">
+{% for mode, heading in [('replay', '実際の記録'), ('gallery', '表示の見本'), ('static', '状況を想定した表示')] %}
+<section class="catalog-section {{ mode }}" aria-label="{{ heading }}"><h2>{{ heading }}</h2><div class="grid">
+{% for demo in demos if demo.mode == mode or (mode == 'gallery' and demo.mode == 'intro') %}
+<a class="card {{ 'recorded' if mode == 'replay' else '' }}" data-demo-id="{{ demo.id }}" href="/demo/{{ demo.id }}" {% if not demo.available %}aria-disabled="true" tabindex="-1"{% endif %}>
+<span class="tag">{{ '起動アニメーション' if demo.mode == 'intro' else '実記録 · 時間を動かして再生' if mode == 'replay' else '表示パターン一覧' if mode == 'gallery' else '架空の想定 · 表示のみ' }}</span>
+<h3>{{ demo.title }}</h3><p>{{ demo.description }}</p><span class="open">{{ 'デモを開く →' if demo.available else '記録を準備中' }}</span>
+</a>
+{% endfor %}
+</div></section>
+{% endfor %}
+</div>
+<p class="note">想定デモの運行状況・時刻は架空です。実際の運行情報は、本番のサイネージで確認してください。</p>
+</main><script>
+const demoRoot=location.pathname.replace(/\/$/,'');
+for(const link of document.querySelectorAll('[data-demo-id]'))link.href=demoRoot+'/'+link.dataset.demoId;
+document.getElementById('spec-link').href=demoRoot+'/readme';
+</script></body></html>

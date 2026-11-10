@@ -1,8 +1,8 @@
-keihan-tracker[delay]==2.5.0
+keihan-tracker==2.8.0
+train_operation_info @ git+https://github.com/dk-butsuri/train_operation_info.git@fe53ac75db924ef5b6820629865a4a513e0ffdd3
 fastapi
 jinja2
 uvicorn
 python-dotenv
-google-genai
 pyyaml
 ntplib

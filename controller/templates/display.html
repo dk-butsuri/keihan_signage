@@ -1,94 +1,164 @@
-<!DOCTYPE html>
-<html style="margin:0;padding:0;width:100%;height:100%">
-<head>
-    <meta charset="UTF-8">
-    <title>サイネージ</title>
-    <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-        iframe { width: 100%; height: 100%; border: none; display: block; }
-        #maintenance {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: #0d1117;
-            color: #e6edf3;
-            font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>サイネージ</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0B0B0C}iframe{width:100%;height:100%;border:0;display:block}[hidden]{display:none!important}#reconnecting-screen{position:fixed;inset:0;z-index:9999;background:#0B0B0C;overflow:hidden}#reconnecting-content{position:absolute;left:0;top:0;transform-origin:top left}@keyframes spin{to{transform:rotate(360deg)}}.attempt{display:flex;align-items:center;gap:20px;height:34px;font-size:19px;line-height:1}.attempt-detail{color:#A1A1A6;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1}
+#clock-time, #clock-seconds { display:inline-flex; flex-shrink:0; letter-spacing:0; white-space:nowrap; }
+.clock-digit { display:inline-block; flex:0 0 .58em; width:.58em; text-align:center; }
+.clock-separator { display:inline-block; flex:0 0 .22em; width:.22em; text-align:center; }
+</style></head><body><iframe id="f" src="/transit/"></iframe>
+<div id="reconnecting-screen" hidden="">
+<div style="width: 1920px; height: 1080px; box-sizing: border-box; padding: 44px 56px; display: flex; flex-direction: column; background: #0B0B0C; color: #F1F1EE; font-family: 'Zen Kaku Gothic New', sans-serif; font-variant-numeric: tabular-nums; overflow: hidden" id="reconnecting-content">
+
+<header style="flex-shrink: 0; height: 104px; display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid #26262A">
+<div></div>
+<div style="display: flex; align-items: flex-end; gap: 28px">
+<div style="font-size: 20px; font-weight: 400; color: #A1A1A6; letter-spacing: 0.08em; padding-bottom: 10px" id="clock-date">11.06 金</div>
+<div style="display: flex; align-items: baseline; gap: 4px; line-height: 0.9">
+<span style="font-size: 92px; font-weight: 300; letter-spacing: -0.02em" id="clock-time">12:09</span>
+<span style="font-size: 36px; font-weight: 300; color: #7C7C82" id="clock-seconds">:36</span>
+</div>
+</div>
+</header>
+
+<main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 88px">
+
+<div style="display: flex; align-items: center; gap: 40px">
+<span style="display: inline-block; flex-shrink: 0; width: 84px; height: 84px; box-sizing: border-box; border: 5px solid #26262A; border-top-color: #F1F1EE; border-radius: 50%; animation: spin 1s linear infinite"></span>
+<div>
+<div style="font-size: 56px; font-weight: 500; line-height: 1">サーバーに再接続しています</div>
+<div style="margin-top: 22px; font-size: 24px; color: #A1A1A6; line-height: 1">つながりしだい、自動で列車とバスの表示に戻ります。</div>
+</div>
+</div>
+
+<div style="display: flex; gap: 40px; margin-top: 80px; padding-left: 124px">
+<div style="width: 360px"><div style="font-size: 18px; color: #7C7C82; line-height: 1">再試行</div><div style="margin-top: 18px; display: flex; align-items: baseline; gap: 6px; line-height: 1"><span style="font-size: 72px; font-weight: 300" id="retry-count">7</span><span style="font-size: 24px; color: #A1A1A6">回目</span></div><div style="margin-top: 16px; font-size: 18px; color: #A1A1A6; line-height: 1; height: 18px">15秒ごとに確認</div></div>
+<div style="width: 360px"><div style="font-size: 18px; color: #7C7C82; line-height: 1">次の再試行まで</div><div style="margin-top: 18px; display: flex; align-items: baseline; gap: 6px; line-height: 1"><span style="font-size: 72px; font-weight: 300" id="next-retry">6</span><span style="font-size: 24px; color: #A1A1A6">秒</span></div><div style="margin-top: 16px; font-size: 18px; color: #A1A1A6; line-height: 1; height: 18px"><div style="position: relative; width: 300px; height: 4px; background: #26262A; border-radius: 2px; top: 6px"><div style="position: absolute; inset: 0 auto 0 0; width: 60%; background: #F1F1EE; border-radius: 2px" id="retry-progress"></div></div></div></div>
+<div style="width: 360px"><div style="font-size: 18px; color: #7C7C82; line-height: 1">途切れてから</div><div style="margin-top: 18px; display: flex; align-items: baseline; gap: 6px; line-height: 1"><span id="elapsed-minutes" style="font-size:72px;font-weight:300">0</span><span style="font-size:24px;color:#A1A1A6">分</span><span id="elapsed-seconds" style="font-size:72px;font-weight:300">0</span><span style="font-size:24px;color:#A1A1A6">秒</span></div><div style="margin-top: 16px; font-size: 18px; color: #A1A1A6; line-height: 1; height: 18px"><span style="color: #F1F1EE" id="failure-since">12:07:57</span> から</div></div>
+</div>
+
+<div style="margin-top: auto; display: flex; gap: 56px; padding: 32px 36px; background: #151517; border-radius: 4px">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 14px">
+<div style="font-size: 20px; font-weight: 500; line-height: 1; padding-bottom: 14px; border-bottom: 1px solid #26262A">いまの状態</div>
+<div style="display: flex; gap: 24px; line-height: 1.4"><div style="width: 136px; flex-shrink: 0; font-size: 19px; color: #7C7C82">原因</div><div style="font-size: 21px"><span style="color: #FF5B2E; font-weight: 500" id="failure-cause">表示サーバー（transit）が応答しません</span></div></div>
+<div style="display: flex; gap: 24px; line-height: 1.4"><div style="width: 136px; flex-shrink: 0; font-size: 19px; color: #7C7C82"></div><div style="font-size: 21px"><span style="color: #A1A1A6; font-size: 19px" id="failure-description">中継（controller）までは届いています。transit が止まっているか、再起動中です。</span></div></div>
+<div style="display: flex; gap: 24px; line-height: 1.4"><div style="width: 136px; flex-shrink: 0; font-size: 19px; color: #7C7C82">確認先</div><div style="font-size: 21px" id="check-target">/transit</div></div>
+<div style="display: flex; gap: 24px; line-height: 1.4"><div style="width: 136px; flex-shrink: 0; font-size: 19px; color: #7C7C82">最後に正常</div><div style="font-size: 21px" id="last-ok">12:07:42</div></div>
+</div>
+<div style="width: 640px; flex-shrink: 0">
+<div style="font-size: 20px; font-weight: 500; line-height: 1; padding-bottom: 14px; border-bottom: 1px solid #26262A; margin-bottom: 8px">試行の記録（新しい順）</div>
+
+<div id="attempts"></div></div>
+</div>
+
+</main>
+</div>
+</div>
+<script>
+var currentMode = 'transit';
+var lastOk = Date.now();
+var firstFailure = null;
+var failures = 0;
+var attempts = [];
+var TIMEOUT_MS = 60000;
+var CHECK_INTERVAL_MS = 15000;
+var nextCheckAt = Date.now() + 5000;
+var checkInFlight = false;
+const $ = id => document.getElementById(id);
+function timeText(time) {
+    return new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(new Date(time));
+}
+function scaleScreen() {
+    const aspect=Math.min(16/8,Math.max(16/10,innerWidth/Math.max(1,innerHeight)));
+    const width=Math.max(1920,1080*aspect),height=Math.max(1080,1920/aspect);
+    const scale=Math.min(innerWidth/width,innerHeight/height),content=$('reconnecting-content');
+    content.style.width=width+'px';content.style.height=height+'px';
+    content.style.transform=`scale(${scale})`;
+    content.style.left=Math.max(0,(innerWidth-width*scale)/2)+'px';
+    content.style.top=Math.max(0,(innerHeight-height*scale)/2)+'px';
+}
+window.addEventListener('resize',scaleScreen);scaleScreen();
+function setMode(mode) {
+    if (mode === currentMode || !['transit','clock'].includes(mode)) return;
+    currentMode=mode;$('f').src='/'+mode+'/';
+    lastOk=Date.now();firstFailure=null;failures=0;attempts=[];
+    $('reconnecting-screen').hidden=true;
+}
+function setClockDigits(element, text) {
+    if (element.childElementCount !== text.length) {
+        element.replaceChildren(...Array.from(text, character => {
+            const span = document.createElement('span');
+            span.className = character === ':' ? 'clock-separator' : 'clock-digit';
+            return span;
+        }));
+    }
+    Array.from(text).forEach((character, index) => {
+        element.children[index].textContent = character;
+    });
+}
+function updateDisplay() {
+    const now=Date.now(),date=new Date(now);
+    const parts=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',weekday:'short'}).formatToParts(date);
+    const part=type=>parts.find(p=>p.type===type).value,time=timeText(now);
+    $('clock-date').textContent=`${part('month')}.${part('day')} ${part('weekday')}`;
+    setClockDigits($('clock-time'), time.slice(0,5));setClockDigits($('clock-seconds'), time.slice(5));
+    if(firstFailure!==null && now-lastOk>=TIMEOUT_MS)$('reconnecting-screen').hidden=false;
+    $('retry-count').textContent=failures;
+    const seconds=Math.max(0,Math.ceil((nextCheckAt-now)/1000));
+    $('next-retry').textContent=seconds;
+    $('retry-progress').style.width=Math.min(100,Math.max(0,(nextCheckAt-now)/CHECK_INTERVAL_MS*100))+'%';
+    const elapsed=firstFailure===null?0:Math.max(0,Math.floor((now-firstFailure)/1000));
+    $('elapsed-minutes').textContent=Math.floor(elapsed/60);$('elapsed-seconds').textContent=elapsed%60;
+    $('failure-since').textContent=firstFailure===null?'—':timeText(firstFailure);
+    $('check-target').textContent='/'+currentMode;$('last-ok').textContent=timeText(lastOk);
+}
+function recordFailure(code,detail) {
+    const now=Date.now();if(firstFailure===null)firstFailure=now;failures++;
+    attempts.unshift({number:failures,time:now,code,detail});attempts=attempts.slice(0,7);
+    const cause=$('failure-cause'),description=$('failure-description');
+    if(code==='—') {
+        cause.textContent='サーバーまで届きません';
+        description.textContent='この画面の端末のネットワークか、外への接続が止まっています。';
+    } else if(code===502 && detail==='Upstream unreachable') {
+        cause.textContent=`表示サーバー（${currentMode}）が応答しません`;
+        description.textContent=`中継（controller）までは届いています。${currentMode} が止まっているか、再起動中です。`;
+    } else {
+        cause.textContent=`表示サーバー（${currentMode}）がエラーを返しています（HTTP ${code}）`;
+        description.textContent='';
+    }
+    const list=$('attempts');list.replaceChildren();
+    for(const attempt of attempts) {
+        const row=document.createElement('div');row.className='attempt';
+        for(const [value,style] of [[attempt.number,'width:40px;color:#7C7C82;flex-shrink:0'],[timeText(attempt.time),'width:96px;flex-shrink:0'],[attempt.code,'width:48px;color:#FF5B2E;font-weight:500;flex-shrink:0'],[attempt.detail,'']]) {
+            const span=document.createElement('span');span.textContent=value;span.style.cssText=style;if(!style)span.className='attempt-detail';row.append(span);
         }
-        #maintenance.active { display: flex; }
-        #maintenance h1 { font-size: 3.5rem; margin: 0 0 1.5rem; letter-spacing: 0.15em; }
-        #maintenance p { font-size: 1.4rem; color: #8b949e; margin: 0; }
-    </style>
-</head>
-<body>
-    <iframe id="f" src="/transit/"></iframe>
-    <div id="maintenance">
-        <h1>メンテナンス中</h1>
-        <p id="maintenance-time"></p>
-    </div>
-    <script>
-        var currentMode = 'transit';
-        var lastOk = Date.now();
-        var maintenanceStart = null;
-        var TIMEOUT_MS = 60000;
-        var CHECK_INTERVAL_MS = 15000;
-
-        function setMode(m) {
-            if (m === currentMode) return;
-            currentMode = m;
-            document.getElementById('f').src = '/' + m + '/';
+        list.append(row);
+    }
+    updateDisplay();
+}
+async function healthCheck() {
+    if(checkInFlight)return;
+    checkInFlight=true;nextCheckAt=Date.now()+CHECK_INTERVAL_MS;
+    const mode=currentMode,controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),10000);
+    try {
+        const response=await fetch('/'+mode,{signal:controller.signal,cache:'no-store'});
+        if(mode!==currentMode)return;
+        if(response.status<500) {
+            const reconnecting=!$('reconnecting-screen').hidden;
+            lastOk=Date.now();firstFailure=null;failures=0;attempts=[];
+            $('reconnecting-screen').hidden=true;
+            if(reconnecting)$('f').src='/'+currentMode+'/';
+        } else {
+            let detail=response.statusText;
+            try {const data=await response.json();if(typeof data.detail==='string')detail=data.detail;} catch(error) {if(controller.signal.aborted)throw error;}
+            if(mode===currentMode)recordFailure(response.status,detail);
         }
+    } catch(error) {
+        if(mode===currentMode)recordFailure('—',controller.signal.aborted?'応答なし（10秒でタイムアウト）':'接続できません');
+    } finally {clearTimeout(timer);checkInFlight=false;updateDisplay();}
+}
+fetch('/api/mode').then(r=>r.json()).then(data=>setMode(data.mode)).catch(()=>{});
+const events=new EventSource('/api/mode/stream?client=display');
+events.onmessage=event=>{try{setMode(JSON.parse(event.data).mode);}catch(error){}};
+setTimeout(()=>{healthCheck();setInterval(healthCheck,CHECK_INTERVAL_MS);},5000);
+setInterval(updateDisplay,1000);updateDisplay();
 
-        function showMaintenance() {
-            var el = document.getElementById('maintenance');
-            if (!el.classList.contains('active')) {
-                if (!maintenanceStart) maintenanceStart = new Date();
-                var d = maintenanceStart;
-                var fmt = d.getFullYear() + '/' +
-                    ('0' + (d.getMonth()+1)).slice(-2) + '/' +
-                    ('0' + d.getDate()).slice(-2) + ' ' +
-                    ('0' + d.getHours()).slice(-2) + ':' +
-                    ('0' + d.getMinutes()).slice(-2);
-                document.getElementById('maintenance-time').textContent = 'メンテナンス開始: ' + fmt;
-                el.classList.add('active');
-            }
-        }
-
-        function hideMaintenance() {
-            document.getElementById('maintenance').classList.remove('active');
-            maintenanceStart = null;
-            lastOk = Date.now();
-        }
-
-        function healthCheck() {
-            var controller = new AbortController();
-            var timer = setTimeout(function() { controller.abort(); }, 10000);
-            fetch('/' + currentMode, { signal: controller.signal })
-                .then(function(resp) {
-                    clearTimeout(timer);
-                    if (resp.status < 500) {
-                        lastOk = Date.now();
-                        hideMaintenance();
-                    } else {
-                        if (Date.now() - lastOk > TIMEOUT_MS) showMaintenance();
-                    }
-                })
-                .catch(function() {
-                    clearTimeout(timer);
-                    if (Date.now() - lastOk > TIMEOUT_MS) showMaintenance();
-                });
-        }
-
-        fetch('/api/mode').then(function(r) { return r.json(); }).then(function(d) { setMode(d.mode); });
-
-        var es = new EventSource('/api/mode/stream');
-        es.onmessage = function(e) { setMode(JSON.parse(e.data).mode); };
-
-        setInterval(healthCheck, CHECK_INTERVAL_MS);
-        setTimeout(healthCheck, 5000);
-    </script>
-</body>
-</html>
+</script></body></html>

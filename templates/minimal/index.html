@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>京阪サイネージ</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap"><script>
+const config = {{ config | tojson }};
+const openingAssembly={settled:new Set(),failed:new Set(),timer:null};
+const openingAllowed=!config.demo&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&new URLSearchParams(location.search).get('motion')!=='off';
+document.documentElement.dataset.assembly=openingAllowed?'pending':'skipped';
+if(openingAllowed) {
+    document.documentElement.classList.add('assembly-pending');
+    openingAssembly.timer=setTimeout(()=>{
+        if(document.documentElement.dataset.assembly!=='pending')return;
+        document.documentElement.dataset.assembly='skipped';document.documentElement.classList.remove('assembly-pending');
+        document.dispatchEvent(new Event('signage:assembly-cancel'));
+    },2000);
+}
+</script>
+<style>html.assembly-pending #screen{visibility:hidden}</style>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0B0B0C}#screen{transform-origin:top left}[hidden]{display:none!important}@keyframes spin{to{transform:rotate(360deg)}}.delay-list{flex:1;min-height:0;overflow:hidden}.empty{font-size:20px;color:#A1A1A6;padding:24px 0;overflow-wrap:anywhere}.line-label{position:absolute;display:flex;flex-direction:column;align-items:center;line-height:1;white-space:nowrap;background:#0B0B0C}.line-kind{min-width:40px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:3px;font-size:14px;font-weight:700}.line-delay{margin-top:4px;font-size:17px;line-height:18px}.line-stopped{margin-top:3px;font-size:14px;font-weight:700;color:#FF5B2E;line-height:18px}.map-station{position:absolute;text-align:center;color:#A1A1A6;line-height:1;font-size:16px}.map-outside{position:absolute;font-size:16px;color:#7C7C82;line-height:1;white-space:nowrap}
+#clock-time, #clock-seconds { display:inline-flex; flex-shrink:0; letter-spacing:0; white-space:nowrap; }
+.clock-digit { display:inline-block; flex:0 0 .58em; width:.58em; text-align:center; }
+.clock-separator { display:inline-block; flex:0 0 .22em; width:.22em; text-align:center; }
+.departure-content { flex:1; min-width:0; display:grid; grid-template-columns:140px minmax(0,1fr) 100px; grid-template-rows:44px auto; column-gap:4px; row-gap:10px; align-items:center; }
+.departure-clock { display:contents; }
+.departure-prediction { display:contents; }
+.departure-time { grid-column:1; grid-row:1; font-size:44px; font-weight:400; line-height:44px; white-space:nowrap; }
+.departure-time-label { grid-column:1; grid-row:1; align-self:start; font-size:12px; font-weight:400; line-height:14px; color:#A1A1A6; }
+.departure-scheduled .departure-content { grid-template-rows:16px 54px 24px; row-gap:0; }
+.departure-scheduled .departure-time { grid-row:2; align-self:start; }
+.departure-scheduled .departure-secondary { grid-row:3; }
+.departure-scheduled .departure-destination, .departure-scheduled .departure-status { grid-row:1 / 4; }
+.departure-destination { grid-column:2; grid-row:1 / 3; align-self:center; min-width:0; font-size:30px; font-weight:500; line-height:32px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.train-kind { width:100px; align-self:stretch; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:#2B5FD9; color:#FFFFFF; }
+.train-kind-ja { font-size:24px; font-weight:700; line-height:30px; white-space:nowrap; }
+.train-kind-en { font-size:14px; font-weight:400; line-height:18px; white-space:nowrap; }
+.next-content { flex:1; min-width:0; display:grid; grid-template-columns:minmax(0,1fr) 112px; align-content:center; align-items:center; column-gap:12px; row-gap:6px; padding:0 22px; }
+.next-content [data-field="destination"], .next-content [data-field="position"] { min-width:0; text-align:center; }
+.next-content [data-field="destination"] { font-size:30px; line-height:32px; font-weight:500; }
+.next-content [data-field="position"] { font-size:19px; line-height:22px; color:#D9D9D6; overflow-wrap:anywhere; }
+.next-content [data-field="delay"], .next-content [data-field="stopped"] { text-align:center; white-space:nowrap; line-height:22px; }
+.next-content :where([data-field="stopped"]) { font-size:16px; font-weight:700; color:#FF5B2E; }
+.departure-status { grid-column:3; grid-row:1 / 3; align-self:center; min-width:0; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+.departure-status:has(.train-delay-metric, .train-stop-badge) { align-items:center; }
+.departure-remaining { min-width:0; display:flex; justify-content:flex-end; }
+.departure-secondary { grid-column:1 / 3; grid-row:2; min-height:24px; max-height:24px; font-size:17px; line-height:22px; color:#A1A1A6; display:flex; align-items:center; gap:4px; white-space:nowrap; overflow:hidden; align-self:start; }
+.departure-secondary.train-location { gap:8px; font-size:16px; }
+.train-location svg { width:18px; height:18px; flex-shrink:0; }
+.train-location .location-station { white-space:nowrap; }
+.train-location .location-state { flex-shrink:0; padding:0 5px; border:1px solid #4A4A50; border-radius:3px; font-size:13px; line-height:18px; color:#D9D9D6; }
+.train-location .location-link { width:28px; height:14px; flex-shrink:0; }
+.train-delay-metric { display:flex; justify-content:center; align-items:baseline; gap:2px; line-height:30px; color:#FFB020; white-space:nowrap; }
+.train-delay-label, .train-delay-unit { font-size:16px; font-weight:400; line-height:22px; }
+.train-delay-label { font-size:20px; }
+.train-delay-number { font-size:30px; font-weight:500; line-height:30px; }
+.train-delay-metric.is-lower-bound { gap:2px; }
+.train-delay-metric.is-lower-bound .train-delay-label, .train-delay-metric.is-lower-bound .train-delay-unit { font-size:12px; }
+.train-delay-metric.is-lower-bound .train-delay-label { font-size:14px; }
+.train-delay-metric.is-lower-bound .train-delay-number { font-size:22px; }
+.train-stop-badge { display:inline-block; padding:1px 7px; border-radius:3px; background:rgba(255,91,46,.16); font-size:16px; font-weight:700; line-height:22px; color:#FF5B2E; white-space:nowrap; }
+.departure-delay.train-stop-badge { color:#FF5B2E; }
+.train-stop-badge.is-lower-bound { padding:1px 5px; font-size:14px; }
+.train-stop-badge.is-long-stop { font-size:13px; }
+.next-content .train-stop-badge { justify-self:center; }
+.departure-compact .train-stop-badge.is-lower-bound { padding:1px 4px; font-size:12px; }
+.sub-station-details { display:flex; align-items:center; gap:6px; min-height:24px; white-space:nowrap; }
+.station-badge { width:22px; height:22px; flex-shrink:0; box-sizing:border-box; border:1px solid #A1A1A6; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:500; line-height:1; transform:translateY(1px); }
+.station-badge > span { display:block; transform:translateY(-1px); }
+.sub-station-time { color:#F1F1EE; font-weight:500; }
+.departure-delay { font-size:16px; font-weight:700; line-height:22px; color:#FFB020; white-space:nowrap; text-align:right; }
+.departure-single-line .departure-content { grid-template-rows:44px; row-gap:0; }
+.departure-single-line .departure-destination, .departure-single-line .departure-status { grid-row:1; }
+.departure-scheduled.departure-single-line .departure-content { grid-template-rows:16px 44px; }
+.departure-scheduled.departure-single-line .departure-destination, .departure-scheduled.departure-single-line .departure-status { grid-row:1 / 3; }
+.departure-scheduled.departure-compact .departure-content { grid-template-rows:44px; }
+.departure-compact .departure-clock { display:flex; grid-column:1; grid-row:1; align-items:baseline; gap:6px; min-width:0; white-space:nowrap; }
+.departure-scheduled.departure-compact .departure-clock { transform:translateY(-3px); }
+.departure-compact .departure-time-label { align-self:auto; line-height:14px; }
+.departure-compact .departure-time { align-self:auto; line-height:44px; }
+.departure-scheduled.departure-compact .departure-destination, .departure-scheduled.departure-compact .departure-status { grid-row:1; }
+.departure-compact .departure-status { gap:2px; }
+.departure-compact .departure-delay { font-size:14px; line-height:16px; }
+.departure-original { grid-column:1; grid-row:1; display:flex; align-items:baseline; gap:5px; font-size:13px; line-height:16px; color:#A1A1A6; white-space:nowrap; }
+.departure-original.is-delayed [data-field="scheduled-time"] { text-decoration:line-through; text-decoration-thickness:1px; text-decoration-color:#FFB020; }
+.departure-original-delay { font-size:12px; line-height:16px; color:#FFB020; }
+.departure-original.is-lower-bound { gap:3px; font-size:11px; }
+.departure-original.is-lower-bound .departure-original-delay { font-size:11px; }
+.departure-revised .departure-prediction { grid-column:1; grid-row:2; align-self:start; display:flex; align-items:baseline; gap:6px; white-space:nowrap; }
+.departure-revised .departure-time-label { align-self:auto; font-size:16px; line-height:20px; }
+.departure-revised .departure-time { align-self:auto; }
+.departure-revised .departure-time.is-pending { font-size:32px; }
+.departure-revised.departure-compact .departure-content { grid-template-rows:auto; }
+.departure-revised.departure-compact .departure-clock { flex-direction:column; align-items:flex-start; gap:2px; transform:translateY(-2px); }
+.departure-revised.departure-compact .departure-time { font-size:34px; line-height:36px; }
+.departure-revised.departure-compact .departure-time.is-pending { font-size:27px; }
+.departure-revised.departure-compact .departure-destination, .departure-revised.departure-compact .departure-status { grid-row:1; }
+.bus-card { display:grid; grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr); gap:6px; padding-left:16px; padding-right:16px; }
+.bus-card { box-sizing:border-box; height:116px; min-height:100px; align-items:center; padding-top:6px; padding-bottom:6px; background:#151517; border-radius:4px; }
+.bus-endpoint { min-width:0; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.bus-place { max-width:100%; font-size:22px; line-height:26px; font-weight:400; color:#D9D9D6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bus-destination { font-weight:700; color:#F1F1EE; }
+.bus-time { font-size:32px; line-height:34px; font-weight:400; color:#D9D9D6; white-space:nowrap; }
+.bus-arrow { transform:translateY(-30px); font-size:20px; line-height:26px; text-align:center; color:#7C7C82; }
+.bus-status, .bus-terminal-note { height:22px; font-size:15px; line-height:22px; color:#A1A1A6; white-space:nowrap; }
+.bus-status-main { height:22px; display:flex; align-items:baseline; gap:2px; line-height:22px; white-space:nowrap; }
+.bus-status-number { font-size:20px; line-height:22px; color:#D9D9D6; }
+.bus-status-unit { font-size:14px; }
+.bus-card.is-cancelled .bus-status { color:#FF5B2E; }
+#screen.dense-map { padding:24px 56px !important; }
+#screen.dense-map > header { height:80px !important; padding-bottom:20px !important; }
+#screen.dense-map #suspended { padding-top:24px !important; }
+#screen.dense-map #line-map { margin-top:16px !important; }
+#screen.dense-map #suspended-columns { margin-top:14px !important; }
+.compact-map .line-kind { height:18px; }
+.compact-map .line-delay { margin-top:2px; font-size:16px; line-height:16px; }
+.compact-map .line-stopped { margin-top:2px; line-height:16px; }
+.operation-group { margin-top:8px; padding:20px; background:#151517; border-radius:4px; }
+.operation-group-head { display:flex; align-items:center; gap:12px; min-height:32px; line-height:1.4; font-size:21px; white-space:nowrap; }
+.operation-mark { width:24px; flex-shrink:0; text-align:center; font-size:25px; line-height:1; color:#7C7C82; transform:translateY(-2px); }
+.operation-group.is-normal .operation-mark { color:#30D158; font-weight:700; -webkit-text-stroke:.35px currentColor; }
+.operation-group-name { font-weight:500; }
+.operation-group-status { margin-left:auto; font-size:16px; color:#7C7C82; }
+.operation-group.is-warning .operation-mark, .operation-group.is-warning .operation-group-status { color:#FF5B2E; font-weight:700; }
+.operation-lines { margin-top:14px; position:relative; }
+.operation-lines-page { display:flex; flex-direction:column; gap:12px; }
+.operation-line { display:flex; justify-content:space-between; gap:12px; font-size:18px; line-height:1.5; }
+.operation-line-name { color:#D9D9D6; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.operation-line-status { color:#A1A1A6; font-size:15px; flex-shrink:0; }
+.operation-page-number { color:#7C7C82; font-size:14px; text-align:right; padding-top:10px; }
+#suspended-delay-list .operation-group { padding:10px 16px; }
+#suspended-delay-list .operation-group-head { font-size:20px; gap:10px; }
+#suspended-delay-list .operation-group-status { display:none; }
+.operation-compact-lines { position:relative; min-height:24px; margin-left:auto; min-width:0; flex:1; text-align:right; font-size:15px; }
+span.operation-compact-lines { color:#7C7C82; }
+.operation-compact-lines .operation-line { min-width:0; font-size:15px; line-height:24px; }
+.operation-compact-lines .operation-line-name { display:block; }
+.operation-compact-lines .operation-page-number { flex-shrink:0; padding:0; font-size:12px; }
+.operation-compact-lines > div { display:flex; flex-direction:row; justify-content:flex-end; align-items:center; gap:8px; }
+.operation-slides { flex-shrink:0; height:112px; margin-top:24px; display:grid; grid-template-columns:144px minmax(0,1fr); position:relative; background:#151517; border-radius:4px; overflow:hidden; }
+.operation-label { display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; color:#A1A1A6; font-size:16px; border-right:1px solid #26262A; }
+.operation-pagination { display:flex; flex-wrap:wrap; max-width:112px; align-items:center; justify-content:center; gap:8px; }
+.operation-dot { display:block; width:8px; height:8px; border-radius:50%; background:#4A4A50; }
+.operation-dot.is-current { background:#F1F1EE; }
+.operation-viewport { position:relative; min-width:0; height:108px; overflow:hidden; }
+.operation-page { position:absolute; inset:0; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; gap:12px; padding:18px 0; }
+.operation-item { box-sizing:border-box; height:30px; flex-shrink:0; line-height:1.5; display:grid; grid-template-columns:232px 136px minmax(0,1fr) 88px; align-items:center; gap:24px; padding:0 28px; white-space:nowrap; }
+.operation-name { color:#F1F1EE; font-size:20px; line-height:1.5; font-weight:500; overflow:hidden; text-overflow:ellipsis; }
+.operation-status { color:#FF5B2E; font-size:18px; line-height:1.5; font-weight:500; }
+.operation-detail { min-width:0; color:#D9D9D6; font-size:19px; line-height:1.5; overflow:hidden; text-overflow:ellipsis; }
+.operation-age { color:#7C7C82; font-size:16px; line-height:1.5; text-align:right; }
+.operation-track { position:absolute; left:144px; right:0; bottom:0; height:3px; background:#26262A; overflow:hidden; }
+.operation-progress { height:100%; background:#F1F1EE; transform:scaleX(0); transform-origin:left; }
+#screen.has-operations { padding:24px 56px !important; }
+#screen.has-operations > header { height:80px !important; padding-bottom:20px !important; }
+#screen.has-operations #normal { padding-top:24px !important; }
+#screen.has-operations:has(#suspended:not([hidden])) { padding-top:18px !important; padding-bottom:18px !important; }
+#screen.has-operations #suspended { padding-top:16px !important; }
+#screen.has-operations #line-map { margin-top:12px !important; }
+#screen.has-operations #suspended-columns { margin-top:12px !important; }
+
+#normal-delay-list.compact-operations .operation-group { padding:10px 14px; }
+#normal-delay-list.compact-operations .operation-group-head { min-height:28px; font-size:20px; }
+#normal-delay-list.compact-operations .operation-lines { margin-top:8px; min-height:110px !important; }
+#normal-delay-list.compact-operations .operation-lines-page { gap:6px; }
+#normal-delay-list.compact-operations .operation-line { font-size:16px; line-height:24px; }
+#normal-delay-list.compact-operations .operation-page-number { font-size:12px; padding-top:2px; line-height:18px; }
+#screen.has-operations.operations-crowded { padding-top:12px !important; padding-bottom:12px !important; }
+#screen.has-operations.operations-crowded > header { height:76px !important; padding-bottom:16px !important; }
+#screen.operations-crowded #suspended { padding-top:12px !important; }
+#screen.operations-crowded #suspended > div:first-child > div:first-child { font-size:36px !important; }
+#screen.operations-crowded #line-map { margin-top:8px !important; }
+#screen.operations-crowded #suspended-columns { margin-top:8px !important; }
+#screen.operations-crowded .operation-slides { margin-top:16px; }
+
+.operation-lines > .operation-lines-page, .operation-compact-lines > .operation-lines-page { position:absolute; inset:0 0 auto; }
+
+#screen.operations-crowded .next-content { row-gap:2px; }
+#screen.operations-crowded .next-list [data-field="destination"] { font-size:24px !important; }
+#screen.operations-crowded .next-list [data-field="position"] { font-size:17px !important; }
+
+#normal { --departure-row-min:116px; }
+#screen.has-operations #normal { --departure-row-min:108px; }
+#normal-trains { width:auto !important; flex:1064 1 0; min-width:0; }
+#normal-buses, #normal-delays { width:auto !important; flex:316 1 0; min-width:0; }
+#normal-buses > div:first-child, #normal-delays > div:first-child { flex-shrink:0; }
+#normal-up-list, #normal-down-list, #normal-bus-list { display:grid !important; flex:1; min-height:0; grid-template-rows:repeat(6,minmax(var(--departure-row-min),1fr)); gap:8px; padding-top:8px; }
+#normal-bus-list { grid-template-rows:repeat(6,minmax(100px,1fr)); }
+#suspended-bus-list { display:grid !important; flex:1; min-height:0; gap:8px; padding-top:8px; align-content:start; }
+#suspended-bus-list > .bus-card { height:100%; }
+#normal-up-list, #normal-down-list { align-content:start; --departure-row-height:max(var(--departure-row-min),calc((100% - 40px) / 6)); }
+#normal-up-list > div:not(.empty), #normal-down-list > div:not(.empty), #normal-bus-list > div:not(.empty) { height:100% !important; margin-top:0 !important; }
+#normal-up-list > .empty, #normal-down-list > .empty, #normal-bus-list > .empty { grid-row:1 / -1; align-self:start; }
+#suspended-up, #suspended-down { flex:510 1 0 !important; }
+#suspended-buses, #suspended-delays { width:auto !important; flex:340 1 0; min-width:0; }
+</style></head><body>
+<div id="screen" style="width: 1920px; height: 1080px; box-sizing: border-box; padding: 44px 56px; display: flex; flex-direction: column; background: #0B0B0C; color: #F1F1EE; font-family: 'Zen Kaku Gothic New', sans-serif; font-variant-numeric: tabular-nums; overflow: hidden"><header style="flex-shrink: 0; height: 104px; display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid #26262A">
+<div style="display:flex;flex-direction:column;gap:12px;min-width:0"><div style="font-size: 34px; font-weight: 500; letter-spacing: 0.04em" id="station-name"></div><div id="demo-controls" hidden></div></div>
+<div style="display: flex; align-items: flex-end; gap: 28px"><div style="display: flex; align-items: center; gap: 14px; height: 44px; box-sizing: border-box; padding: 0 18px; margin-bottom: 4px; background: #151517; border: 1px solid #3A3A40; border-radius: 4px; font-size: 19px; line-height: 1; white-space: nowrap" id="reconnect-badge" hidden=""><span style="display: inline-block; flex-shrink: 0; width: 20px; height: 20px; box-sizing: border-box; border: 3px solid #26262A; border-top-color: #F1F1EE; border-radius: 50%; animation: spin 1s linear infinite"></span><span style="font-weight: 500">再接続中</span><span style="color: #A1A1A6" id="retry-count">2回目</span><span style="width: 1px; height: 18px; background: #3A3A40"></span><span style="color: #A1A1A6"><span style="color: #F1F1EE" id="last-trains">12:06:17</span> 時点の情報を表示中</span></div>
+<div style="font-size: 20px; font-weight: 400; color: #A1A1A6; letter-spacing: 0.08em; padding-bottom: 10px" id="clock-date">11.06 金</div>
+<div style="display: flex; align-items: baseline; gap: 4px; line-height: 0.9">
+<span style="font-size: 92px; font-weight: 300; letter-spacing: -0.02em" id="clock-time">12:07</span>
+<span style="font-size: 36px; font-weight: 300; color: #7C7C82" id="clock-seconds">:02</span>
+</div>
+</div>
+</header>
+<main style="flex: 1; min-height: 0; display: flex; gap: 56px; padding-top: 32px" id="normal">
+
+<section style="width: 1064px; flex-shrink: 0; display: flex; gap: 28px" id="normal-trains">
+
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="normal-up">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid rgb(38, 38, 42); flex-shrink: 0;">
+<span style="font-size: 24px; font-weight: 500">京都方面</span>
+<span style="font-size: 15px; color: #7C7C82">出町柳・三条</span>
+</div>
+
+
+
+
+
+
+<div id="normal-up-list"></div></div>
+
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="normal-down">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid rgb(38, 38, 42); flex-shrink: 0;">
+<span style="font-size: 24px; font-weight: 500">大阪方面</span>
+<span style="font-size: 15px; color: #7C7C82">淀屋橋・中之島</span>
+</div>
+
+
+
+
+
+
+<div id="normal-down-list"></div></div>
+</section>
+
+<section style="width: 316px; flex-shrink: 0; display: flex; flex-direction: column" id="normal-buses">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A">
+<span style="font-size: 24px; font-weight: 500">京阪バス</span>
+<span style="font-size: 15px; color: #7C7C82" data-field="bus-stop">同志社香里</span>
+</div>
+
+
+
+
+
+
+<div id="normal-bus-list" style="display: contents;"></div></section>
+
+<section style="width: 316px; flex-shrink: 0; display: flex; flex-direction: column" id="normal-delays">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A">
+<span style="font-size: 24px; font-weight: 500">運行情報</span>
+</div>
+
+
+<div id="normal-delay-list" class="delay-list"></div></section>
+
+</main>
+<main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 30px" id="suspended" hidden="">
+
+<div style="display: flex; align-items: baseline; justify-content: space-between">
+<div style="font-size: 40px; font-weight: 500; line-height: 1">京阪本線で <span style="color: #FF5B2E">ダイヤが乱れています</span></div>
+<div style="font-size: 17px; color: #7C7C82; line-height: 1" id="line-summary">12:06:40 時点の位置　・　走っている 32本のうち 9本が止まっています</div>
+</div>
+
+<div style="margin-top: 22px" id="line-map"></div>
+
+<div style="flex: 1; min-height: 0; display: flex; gap: 36px; margin-top: 18px; padding-top: 0" id="suspended-columns">
+<section style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="suspended-up">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A"><span style="font-size: 24px; font-weight: 500">京都方面</span><span style="font-size: 15px; color: #7C7C82">出町柳・三条</span></div>
+<div style="padding-top: 20px"><div style="font-size: 40px; font-weight: 500; color: #FF5B2E; line-height: 1" data-field="state">止まっています</div>
+</div>
+
+
+<div class="next-list" style="margin-top: auto;"><div style="margin-top: 0px; font-size: 17px; color: rgb(161, 161, 166); line-height: 1; padding-bottom: 2px;" data-field="next-label"></div></div></section>
+<section style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="suspended-down">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A"><span style="font-size: 24px; font-weight: 500">大阪方面</span><span style="font-size: 15px; color: #7C7C82">淀屋橋・中之島</span></div>
+<div style="padding-top: 20px"><div style="font-size: 40px; font-weight: 500; color: #F1F1EE; line-height: 1" data-field="state">遅れて動いています</div>
+</div>
+
+
+<div class="next-list" style="margin-top: auto;"><div style="margin-top: 0px; font-size: 17px; color: rgb(161, 161, 166); line-height: 1; padding-bottom: 2px;" data-field="next-label"></div></div></section>
+<section style="width: 340px; flex-shrink: 0; display: flex; flex-direction: column" id="suspended-buses">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A">
+<span style="font-size: 24px; font-weight: 500">京阪バス</span>
+<span style="font-size: 15px; color: #7C7C82" data-field="bus-stop">同志社香里</span>
+</div>
+
+
+
+
+<div id="suspended-bus-list" style="display: contents;"></div></section>
+
+<section style="width: 340px; flex-shrink: 0; display: flex; flex-direction: column" id="suspended-delays">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A">
+<span style="font-size: 24px; font-weight: 500">運行情報</span>
+</div>
+
+
+<div id="suspended-delay-list" class="delay-list"></div></section>
+
+
+</div>
+</main>
+<div id="operation-slides" class="operation-slides" aria-label="運行情報、2路線ずつ6秒ごとに切り替え" hidden>
+<div class="operation-label"><span>運行情報</span><span id="operation-pagination" class="operation-pagination" role="img"></span></div>
+<div id="operation-viewport" class="operation-viewport"></div>
+<div id="operation-track" class="operation-track" aria-hidden="true"><div id="operation-progress" class="operation-progress"></div></div>
+</div></div>
+<template id="bus-row"><div class="bus-card">
+<div class="bus-endpoint"><span class="bus-place" data-field="origin"></span><span class="bus-time" data-field="arrival"></span><div class="bus-status" data-field="status"></div></div>
+<span class="bus-arrow" aria-hidden="true">→</span>
+<div class="bus-endpoint"><span class="bus-place bus-destination" data-field="destination"></span><span class="bus-time" data-field="terminal-time"></span><span class="bus-terminal-note" data-field="terminal-note"></span></div>
+</div></template>
+<template id="normal-row"><div style="height: 116px; box-sizing: border-box; display: flex; align-items: center; gap: 24px; padding-right: 20px; margin-top: 8px; background: #151517; border-radius: 4px; overflow: hidden">
+<span class="train-kind" data-field="kind"></span>
+<div class="departure-content">
+<div class="departure-clock">
+<div class="departure-original" data-field="original" hidden><span>定刻</span><span data-field="scheduled-time"></span><span class="departure-original-delay" data-field="scheduled-delay" hidden></span></div>
+<div class="departure-prediction">
+<span class="departure-time-label" data-field="time-label" hidden>定刻</span>
+<span class="departure-time" data-field="time"></span>
+</div>
+</div>
+<div class="departure-destination" data-field="destination"></div>
+<div class="departure-status">
+<div class="departure-remaining" data-field="remaining"></div>
+<div class="departure-delay" data-field="delay" hidden></div>
+</div>
+<div class="departure-secondary" data-field="sub"></div>
+</div>
+</div></template>
+<template id="next-row"><div style="height: 92px; display: flex; margin-top: 8px; background: #151517; border-radius: 4px; overflow: hidden">
+<span class="train-kind" data-field="kind"></span>
+<div class="next-content">
+<span data-field="destination"></span><span data-field="delay"></span>
+<span data-field="position"></span><span data-field="stopped"></span>
+</div></div></template>
+
+<script>
+const $ = id => document.getElementById(id);
+const field = (row, name) => row.querySelector(`[data-field="${name}"]`);
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const features = config.features || {};
+const enabled = name => features[name] !== false;
+const colors = {
+    '普通':['普通','#222222','#FFFFFF','#A1A1A6'],
+    '臨時列車':['臨時','#708090','#FFFFFF','#708090'],
+    '区間急行':['区急','#008800','#FFFFFF','#008800'],
+    '準急':['準急','#006EFF','#FFFFFF','#006EFF'],
+    '通勤準急':['通準','#006EFF','#FFFFFF','#006EFF'],
+    '急行':['急行','#FF8C00','#FFFFFF','#FF8C00'],
+    '通勤急行':['通急','#FF8C00','#FFFFFF','#FF8C00'],
+    '深夜急行':['深急','#FF8C00','#FFFFFF','#FF8C00'],
+    '快速急行':['快急','#800080','#FFFFFF','#800080'],
+    '通勤快急':['通快','#800080','#FFFFFF','#800080'],
+    '特急':['特急','#FF0000','#FFFFFF','#FF0000'],
+    'ライナー':['ライナー','#FFFFFF','#FF0000','#FF0000','#FF0000'],
+    '快速特急 洛楽':['洛楽','#FF8383','#FFFFFF','#FF8383'],
+    '快速特急':['洛楽','#FF8383','#FFFFFF','#FF8383'],
+    '臨時':['臨時','#708090','#FFFFFF','#708090']
+};
+const englishKinds = {
+    '普通':'Local', '準急':'Sub exp.', '区間急行':'Semi exp.', '急行':'Exp.',
+    '快速急行':'Rapid exp.', '特急':'Ltd exp.', '通勤準急':'Com. sub exp.',
+    '通勤急行':'Com. exp.', '通勤快急':'Com. rapid exp.', '深夜急行':'Midnight exp.',
+    '快速特急 洛楽':'Rapid ltd exp.', '快速特急':'Rapid ltd exp.', 'ライナー':'Liner',
+    '臨時列車':'Special', '臨時':'Special'
+};
+function kindStyle(row, kind) {
+    const style = colors[kind] || colors['普通'];
+    const el = field(row, 'kind');
+    const japanese=document.createElement('span'),english=document.createElement('span');
+    japanese.className='train-kind-ja';english.className='train-kind-en';
+    japanese.textContent=kind === '快速特急 洛楽' || kind === '臨時列車' ? style[0] : kind;
+    english.textContent=englishKinds[kind] || '';english.hidden=!english.textContent;
+    el.replaceChildren(japanese,english);
+    el.style.background = style[1]; el.style.color = style[2];
+    el.style.border = style[4] ? `2px solid ${style[4]}` : '';
+    el.style.boxSizing = 'border-box';
+}
+function clone(id) { return $(id).content.firstElementChild.cloneNode(true); }
+function empty(list, message) {
+    const el = document.createElement('div'); el.className = 'empty'; el.textContent = message;
+    list.replaceChildren(el);
+}
+let resizeFrame=null;
+function scaleScreen() {
+    const availableHeight=Math.max(1,innerHeight-($('demo-dock')?.getBoundingClientRect().height||0));
+    const aspect=Math.min(16/8,Math.max(16/10,innerWidth/availableHeight));
+    const width=Math.max(1920,1080*aspect),height=Math.max(1080,1920/aspect);
+    const scale=Math.min(innerWidth/width,availableHeight/height),screen=$('screen');
+    const resized=Math.abs(parseFloat(screen.style.width)-width)>.01||Math.abs(parseFloat(screen.style.height)-height)>.01;
+    screen.style.width=width+'px';screen.style.height=height+'px';
+    screen.style.transform=`scale(${scale})`;
+    screen.style.marginLeft=Math.max(0,(innerWidth-width*scale)/2)+'px';
+    screen.style.marginTop=Math.max(0,(availableHeight-height*scale)/2)+'px';
+    if(resized){cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(render);}
+}
+window.addEventListener('resize', scaleScreen);
+scaleScreen();
+for (const mode of ['normal','suspended']) {
+    $(mode + '-buses').hidden = !enabled('buses');
+    $(mode + '-delays').hidden = !enabled('delays');
+    for (const direction of ['up','down']) $(mode+'-'+direction).hidden = !enabled('trains');
+}
+$('normal-trains').hidden = !enabled('trains');
+for (const el of document.querySelectorAll('[data-field="bus-stop"]')) el.textContent = config.buses?.stop_name || '';
+let trainData = null, lineData = null, busData = null, delayData = null;
+function trainDelayText(train, map=false) {
+    if(train.delay>=120 || train.status==='遅れ2時間以上') {
+        const minutes=train.estimated_delay_minutes;
+        return Number.isFinite(minutes) && minutes>120 ? minutes+'分以上'+(map?'':'遅れ') : '2時間以上'+(map?'':'遅れ');
+    }
+    return train.delay ? (map?'+':'')+train.delay+'分'+(map?'':'遅れ') : '定刻';
+}
+function trainDelayMetric(train) {
+    if(!train.delay) return train.estimate_unreliable ? '-' : '定刻';
+    const lowerBound=train.delay>=120 || train.status==='遅れ2時間以上';
+    const minutes=lowerBound?Math.max(120,train.estimated_delay_minutes||120):train.delay;
+    return `<div class="train-delay-metric${lowerBound?' is-lower-bound':''}" aria-label="遅延${esc(minutes)}分${lowerBound?'以上':''}"><span class="train-delay-label">遅延</span><span class="train-delay-number">${esc(minutes)}</span><span class="train-delay-unit">分${lowerBound?'以上':''}</span></div>`;
+}
+function renderStopBadge(element, stopped) {
+    element.classList.add('train-stop-badge');
+    element.classList.toggle('is-lower-bound',stopped.lowerBound);
+    element.classList.toggle('is-long-stop',stopped.minutes>=100);
+    element.textContent=`${stopped.minutes}分${stopped.lowerBound?'以上':''}停止`;
+    element.setAttribute('aria-label',`停止${stopped.minutes}分${stopped.lowerBound?'以上':''}`);
+}
+function renderTrainLocation(sub, train) {
+    const original=train.position || '', duration=/（(?:停止)?\s*(\d+)分(以上)?）$/.exec(original);
+    const location=original.replace(/（[^）]*）$/,'').replace(/(?:に停車中|で停止|を通過中)$/,'');
+    const stations=location.split(/\s*→\s*/).filter(Boolean);
+    sub.classList.add('train-location');sub.setAttribute('aria-label',original);
+    const state=/(に停車中|で停止|を通過中)(?:（[^）]*）)?$/.exec(original)?.[1];
+    const label={'に停車中':'停車中','で停止':'停止','を通過中':'通過中'}[state];
+    const link='<svg class="location-link" viewBox="0 0 28 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1 7h24m-5-4 5 4-5 4"/></svg>';
+    sub.innerHTML=stations.map(station=>`<span class="location-station">${esc(station)}</span>`).join(link)+(stations.length===1&&label?`<span class="location-state">${label}</span>`:'');
+    const minutes=train.stopped_minutes ?? (duration ? Number(duration[1]) : null);
+    return minutes==null ? null : {minutes,lowerBound:!!(train.stopped_lower_bound || duration?.[2])};
+}
+function trainEstimatedTime(train) {
+    if(train.estimate_unreliable || !Number.isFinite(train.minutes_remaining) || train.delay>=120 || train.status==='遅れ2時間以上')return null;
+    if(/^\d{2}:\d{2}$/.test(train.estimated_time || ''))return train.estimated_time;
+    const match=/^(\d{1,2}):(\d{2})$/.exec(train.time || '');
+    if(!match || Number(match[1])>23 || Number(match[2])>59 || !Number.isFinite(train.delay))return null;
+    const minutes=(Number(match[1])*60+Number(match[2])+Math.max(0,train.delay))%1440;
+    return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
+}
+function renderTrains(direction, trains, error) {
+    const list = $('normal-' + direction + '-list'); list.replaceChildren();
+    const visible=(trains || []).filter(train=>!train.is_this_station && (train.estimate_unreliable || !Number.isFinite(train.minutes_remaining) || train.minutes_remaining>=15)).slice(0,6);
+    if (!visible.length) { list.style.removeProperty('grid-template-rows'); empty(list, error || '表示可能な情報がありません'); return; }
+    const compact=visible.map((train,index)=>index>=4);
+    list.style.gridTemplateRows=compact.map(value=>value?'72px':'var(--departure-row-height)').join(' ');
+    for (const [index,train] of visible.entries()) {
+        const row = clone('normal-row'); kindStyle(row, train.kind);
+        row.classList.toggle('departure-compact',compact[index]);
+        const scheduled=/^\d{1,2}:\d{2}$/.test(train.time || '');
+        const delayed=train.delay>=1 || train.status==='遅れ2時間以上';
+        const revised=scheduled && (delayed || train.estimate_unreliable);
+        const estimate=revised ? trainEstimatedTime(train) : null;
+        const time=field(row,'time'),label=field(row,'time-label'),original=field(row,'original');
+        time.textContent=revised ? (estimate || '未定') : train.time;
+        time.classList.toggle('is-pending',revised && !estimate);
+        label.hidden=!scheduled;label.textContent=revised ? '推定' : '定刻';
+        row.classList.toggle('departure-revised',revised);
+        original.hidden=!revised;
+        original.classList.toggle('is-delayed',revised && delayed);
+        original.classList.toggle('is-lower-bound',train.delay>=120 || train.status==='遅れ2時間以上');
+        field(row,'scheduled-time').textContent=train.time;
+        const scheduledDelay=field(row,'scheduled-delay');
+        scheduledDelay.hidden=!delayed;scheduledDelay.textContent=delayed ? trainDelayText(train) : '';
+        row.classList.toggle('departure-scheduled',scheduled);
+        field(row,'destination').textContent = train.destination;
+        const sub = field(row,'sub');
+        let stopped=null;
+        if (train.estimate_unreliable) stopped=renderTrainLocation(sub,train);
+        else if (train.sub_station_time && !(delayed && train.sub_station_name==='寝屋川市')) {
+            const station=train.sub_station_name==='寝屋川市' ? '<span class="station-badge" role="img" aria-label="寝屋川市"><span>寝</span></span>' : esc(train.sub_station_name);
+            sub.innerHTML=train.sub_station_name==='寝屋川市'
+                ? `<span class="sub-station-details">${station}<span class="sub-station-time">${esc(train.sub_station_time)}</span><span>${esc(train.sub_station_verb)}</span></span>`
+                : `${station} <span class="sub-station-time">${esc(train.sub_station_time)}</span> ${esc(train.sub_station_verb)}`;
+        }
+        else sub.textContent = '';
+        sub.hidden=compact[index] || !sub.textContent;
+        row.classList.toggle('departure-single-line',compact[index] || !sub.textContent);
+        const remaining = field(row,'remaining');
+        let text;
+        if (train.is_this_station) text = '停車中';
+        else if (train.estimate_unreliable || train.minutes_remaining == null) text = '-';
+        else if (train.minutes_remaining <= 0) text = 'まもなく';
+        else text = null;
+        remaining.innerHTML = text !== null ? `<div style="font-size:22px;font-weight:700;line-height:1">${text}</div>`
+            : `<div style="display:flex;align-items:baseline;gap:2px;line-height:1;white-space:nowrap"><span style="font-size:16px;color:#A1A1A6">あと</span><span style="font-size:${train.minutes_remaining>=100?30:36}px">${esc(train.minutes_remaining)}</span><span style="font-size:16px;color:#A1A1A6">分</span></div>`;
+        const delay = field(row,'delay');
+        remaining.hidden=revised && !estimate;
+        if(revised) {
+            if(!estimate)remaining.replaceChildren();
+            delay.hidden=!stopped;
+            if(stopped)renderStopBadge(delay,stopped);
+        } else if(train.estimate_unreliable) {
+            remaining.innerHTML=trainDelayMetric(train);
+            delay.hidden=!stopped;
+            if(stopped)renderStopBadge(delay,stopped);
+        } else {
+            delay.hidden=!(train.delay>=1 || train.status==='遅れ2時間以上');
+            delay.textContent=trainDelayText(train);
+        }
+        list.append(row);
+    }
+}
+function renderBuses() {
+    interruptOpeningAssembly();
+    if (!busData) return;
+    for (const mode of ['normal','suspended']) {
+        const list = $(mode+'-bus-list'); list.replaceChildren();
+        if (!busData.buses?.length) { list.style.removeProperty('grid-template-rows'); empty(list, busData.error || 'バス情報なし'); continue; }
+        const count=mode==='normal'?6:Math.min(4,list.clientHeight?Math.max(1,Math.floor(list.clientHeight/108)):4);
+        if(mode==='suspended')list.style.gridTemplateRows=`repeat(${Math.min(count,busData.buses.length)},minmax(100px,116px))`;
+        for (const bus of busData.buses.slice(0,count)) {
+            const row = clone('bus-row');
+            const destination = bus.destination
+                .replace(/^京阪香里園(?:行)?$/, '香里園').replace(/^寝屋川市駅行$/, '寝屋川市駅');
+            field(row,'destination').textContent=destination;
+            const cancelled=bus.status==='運休';row.classList.toggle('is-cancelled',cancelled);
+            const stop=bus.stop_name||config.buses?.stop_name||'乗車バス停';
+            field(row,'origin').textContent=stop;
+            const arrival=/(\d{1,2}:[0-5]\d)/.exec(bus.arrival_time||'');
+            field(row,'arrival').textContent=!cancelled&&arrival?arrival[1].padStart(5,'0'):'—';
+            field(row,'terminal-time').textContent=!cancelled&&bus.terminal_arrival_time?bus.terminal_arrival_time:'—';
+            field(row,'terminal-note').textContent=cancelled?'':bus.terminal_arrival_time?(bus.terminal_arrival_is_estimated?'定刻（推定）':'定刻'):'時刻不明';
+            const status = field(row,'status'), minutes = /^(あと|約)?(\d+)分(後)?(?:に到着)?$/.exec(bus.status);
+            status.innerHTML = !cancelled&&bus.stop_arrival_is_scheduled?'定刻':minutes ? `<div class="bus-status-main">${minutes[1] ? `<span class="bus-status-unit">${minutes[1]}</span>` : ''}<span class="bus-status-number">${minutes[2]}</span><span class="bus-status-unit">分${minutes[3] || ''}</span></div>` : esc((bus.status||'').replace(/に到着$/,''));
+            row.setAttribute('aria-label',`${stop} ${field(row,'arrival').textContent} ${status.textContent}、${destination} ${field(row,'terminal-time').textContent} ${field(row,'terminal-note').textContent}`);
+            list.append(row);
+        }
+    }
+}
+const operationPagers = [];
+const operationMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let operationKey = null;
+function operationSpan(className, text) {
+    const span = document.createElement('span'); span.className = className; span.textContent = text;
+    return span;
+}
+class OperationPager {
+    constructor(root, pages, interval, active, slide=false, changed=()=>{}) {
+        Object.assign(this, {root, pages, interval, active, slide, changed});
+        this.index=0; this.remaining=interval; this.timer=null; this.animations=[];
+        root.replaceChildren(pages[0]); this.changed(0); operationPagers.push(this);
+    }
+    sync() {
+        const running = this.pages.length>1 && !document.hidden && document.documentElement.dataset.assembly!=='running' && this.active();
+        if(running === !!this.timer)return;
+        if(!running) {
+            this.remaining=Math.max(0,this.remaining-(performance.now()-this.started));
+            clearTimeout(this.timer); this.timer=null; this.progress?.pause();
+            this.animations.forEach(animation=>{if(animation.playState==='running')animation.pause();});
+            return;
+        }
+        this.started=performance.now(); this.progress?.play();
+        this.animations.forEach(animation=>{if(animation.playState==='paused')animation.play();});
+        this.timer=setTimeout(()=>this.advance(),this.remaining);
+    }
+    advance() {
+        this.timer=null; this.remaining=this.interval;
+        this.animations.forEach(animation=>animation.cancel()); this.animations=[];
+        const previous=this.pages[this.index];
+        this.index=(this.index+1)%this.pages.length;
+        const current=this.pages[this.index];
+        this.root.replaceChildren(current);
+        const duration=operationMotion.matches?0:this.slide?360:300;
+        if(duration) {
+            if(this.slide) {
+                this.root.prepend(previous);
+                const options={duration,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards'};
+                const outgoing=previous.animate([{transform:'translateY(0)'},{transform:'translateY(-100%)'}],options);
+                this.animations.push(outgoing,current.animate([{transform:'translateY(100%)'},{transform:'translateY(0)'}],options));
+                outgoing.finished.then(()=>previous.remove()).catch(()=>{});
+            } else {
+                this.root.prepend(previous);
+                const outgoing=previous.animate([{opacity:1},{opacity:0}],{duration:300,fill:'forwards'});
+                this.animations.push(outgoing,current.animate([{opacity:0},{opacity:1}],{duration:300,fill:'forwards'}));
+                outgoing.finished.then(()=>previous.remove()).catch(()=>{});
+            }
+        }
+        this.changed(this.index); this.sync();
+    }
+    destroy() {
+        clearTimeout(this.timer); this.progress?.cancel();
+        this.animations.forEach(animation=>animation.cancel());
+    }
+}
+function operationGroups() {
+    return delayData?.groups || ['京阪','大阪メトロ','JR','私鉄'].map(name=>({name,mark:'−',status:'情報なし',lines:[]}));
+}
+function updateOperationAges() {
+    for(const el of $('operation-slides').querySelectorAll('[data-announced]')) {
+        const timestamp=Date.parse(el.dataset.announced), now=displayTime();
+        el.textContent=Number.isFinite(timestamp) && now!=null?Math.max(0,Math.floor((now-timestamp)/60000))+'分前':'';
+    }
+}
+function fitOperationLayout() {
+    $('screen').classList.remove('operations-crowded');
+    if($('suspended').hidden)return;
+    $('screen').classList.toggle('operations-crowded',$('screen').classList.contains('has-operations') && $('line-map').clientHeight>420 && $('suspended-columns').clientHeight<330);
+    const height=$('suspended-columns').clientHeight;
+    for(const row of document.querySelectorAll('.next-list > div:not(:first-child)'))row.style.height=Math.min(92,Math.max(64,(height-163)/2))+'px';
+}
+function renderDelays() {
+    interruptOpeningAssembly();
+    const groups=operationGroups();
+    // 発表時刻だけの更新で、読んでいるページと6秒の進行を巻き戻さない。
+    const key=JSON.stringify(enabled('delays')?groups.map(group=>({...group,lines:(group.lines||[]).map(({announced_time,...line})=>line)})):[]);
+    if(key!==operationKey) {
+        operationKey=key;
+        operationPagers.splice(0).forEach(pager=>pager.destroy());
+        for(const mode of ['normal','suspended']) {
+            const list=$(mode+'-delay-list');list.replaceChildren();
+            list.classList.toggle('compact-operations',mode==='normal' && groups.filter(group=>group.lines?.length).length>=3);
+            if(!enabled('delays'))continue;
+            for(const group of groups) {
+                const card=document.createElement('div');card.className='operation-group';
+                card.classList.toggle('is-normal',['○','〇'].includes(group.mark));
+                card.classList.toggle('is-warning',['×','△'].includes(group.mark));
+                const head=document.createElement('div');head.className='operation-group-head';
+                head.append(operationSpan('operation-mark',group.mark),operationSpan('operation-group-name',group.name),operationSpan('operation-group-status',group.status));
+                card.append(head);list.append(card);
+                const lines=group.lines||[];
+                if(!lines.length) {
+                    if(mode==='suspended')head.append(operationSpan('operation-compact-lines',group.status));
+                    continue;
+                }
+                const holder=document.createElement('div');holder.className=mode==='normal'?'operation-lines':'operation-compact-lines';
+                (mode==='normal'?card:head).append(holder);
+                const size=mode==='normal'?3:1, pages=[];
+                for(let start=0;start<lines.length;start+=size) {
+                    const page=document.createElement('div');page.className='operation-lines-page';
+                    for(const line of lines.slice(start,start+size)) {
+                        const item=document.createElement('div');item.className='operation-line';
+                        item.append(operationSpan('operation-line-name',line.name));
+                        if(mode==='normal')item.append(operationSpan('operation-line-status',line.status));
+                        page.append(item);
+                    }
+                    if(lines.length>size)page.append(operationSpan('operation-page-number',`${Math.floor(start/size)+1}/${Math.ceil(lines.length/size)}`));
+                    pages.push(page);
+                }
+                if(mode==='normal')holder.style.minHeight=(Math.min(size,lines.length)*27+(Math.min(size,lines.length)-1)*12+(pages.length>1?43:0))+'px';
+                new OperationPager(holder,pages,4000,()=>!$(mode).hidden);
+            }
+        }
+        const notices=enabled('delays')?groups.flatMap(group=>group.lines||[]):[];
+        const footer=$('operation-slides');footer.hidden=!notices.length;
+        $('screen').classList.toggle('has-operations',!!notices.length);
+        const viewport=$('operation-viewport'), pagination=$('operation-pagination');
+        viewport.replaceChildren();pagination.replaceChildren();
+        if(notices.length) {
+            const pages=[];
+            for(let start=0;start<notices.length;start+=2) {
+                const page=document.createElement('div');page.className='operation-page';page.dataset.page=start/2;
+                for(const notice of notices.slice(start,start+2)) {
+                    const item=document.createElement('div');item.className='operation-item';
+                    item.append(operationSpan('operation-name',notice.ticker_name),operationSpan('operation-status',notice.status),operationSpan('operation-detail',notice.detail.replace(/\s+/g,' ')));
+                    const age=operationSpan('operation-age','');age.dataset.name=notice.ticker_name;item.append(age);page.append(item);
+                }
+                pages.push(page);pagination.append(operationSpan('operation-dot',''));
+            }
+            pagination.hidden=pages.length<2;$('operation-track').hidden=pages.length<2;
+            const pager=new OperationPager(viewport,pages,6000,()=>!footer.hidden,true,index=>{
+                [...pagination.children].forEach((dot,i)=>dot.classList.toggle('is-current',i===index));
+                pagination.setAttribute('aria-label',`${pages.length}組中${index+1}組目`);
+            });
+            const resetProgress=()=>{
+                pager.progress?.cancel();
+                if(pages.length>1)pager.progress=$('operation-progress').animate([{transform:'scaleX(0)'},{transform:'scaleX(1)'}],{duration:6000,easing:'linear',fill:'forwards'});
+            };
+            const changed=pager.changed;pager.changed=index=>{changed(index);resetProgress();updateOperationAges();};
+            resetProgress();
+            pager.progress?.pause();
+        }
+    }
+    const notices=groups.flatMap(group=>group.lines||[]);
+    for(const pager of operationPagers)for(const page of pager.pages)for(const age of page.querySelectorAll('.operation-age')) {
+        age.dataset.announced=notices.find(line=>line.ticker_name===age.dataset.name)?.announced_time||'';
+    }
+    updateOperationAges();fitOperationLayout();renderBuses();
+    operationPagers.forEach(pager=>pager.sync());
+}
+document.addEventListener('visibilitychange',()=>operationPagers.forEach(pager=>pager.sync()));
+document.addEventListener('signage:assembly-state',()=>operationPagers.forEach(pager=>pager.sync()));
+operationMotion.addEventListener('change',()=>operationPagers.forEach(pager=>pager.animations.forEach(animation=>animation.finish())));
+function packMapLabels(items) {
+    const blocks = [], offsets = [];
+    let span = 0;
+    items.forEach((item, index) => {
+        offsets.push(span);
+        blocks.push({first:index, last:index, sum:item.x-item.width/2-span, count:1});
+        span += item.width+16;
+        while(blocks.length>1 && blocks.at(-2).sum/blocks.at(-2).count > blocks.at(-1).sum/blocks.at(-1).count) {
+            const right=blocks.pop(), left=blocks.pop();
+            blocks.push({first:left.first, last:right.last, sum:left.sum+right.sum, count:left.count+right.count});
+        }
+    });
+    const minimum=100, maximum=$('line-map').clientWidth-8-(span-16);
+    if(maximum<minimum)return null;
+    const packed=[];
+    for(const block of blocks) {
+        const offset=Math.max(minimum,Math.min(maximum,block.sum/block.count));
+        for(let i=block.first;i<=block.last;i++)packed.push({...items[i],left:offset+offsets[i]});
+    }
+    return packed.every(item=>Math.abs(item.left+item.width/2-item.x)<=96) ? packed : null;
+}
+function layoutLabels(trains, direction, positionX) {
+    const lanes = [], context=document.createElement('canvas').getContext('2d');
+    const family=getComputedStyle($('screen')).fontFamily;
+    for(const train of trains.filter(t=>t.direction===direction).sort((a,b)=>a.position-b.position)) {
+        const stopped=train.stopped_minutes!=null;
+        context.font=`400 17px ${family}`;
+        let width=Math.max(56,context.measureText(trainDelayText(train,true)).width+12);
+        context.font=`700 14px ${family}`;
+        width=Math.max(width,context.measureText((colors[train.kind]||colors['普通'])[0]).width+12);
+        if(stopped)width=Math.max(width,context.measureText(`停止${train.stopped_minutes}分${train.stopped_lower_bound?'以上':''}`).width+12);
+        const item={train,stopped,width:Math.ceil(width),x:positionX(train.position)};
+        let placed=false;
+        for(let lane=0;lane<lanes.length;lane++) {
+            const packed=packMapLabels([...lanes[lane],item]);
+            if(packed) { lanes[lane]=packed;placed=true;break; }
+        }
+        if(!placed)lanes.push(packMapLabels([item]));
+    }
+    return lanes.flatMap((items,lane)=>items.map(item=>({...item,lane})));
+}
+function renderMap(data) {
+    const root = $('line-map'); root.replaceChildren();
+    if (!data.stations.length) return;
+    const first = data.stations[0], last = data.stations.at(-1);
+    const mapWidth=root.clientWidth,trackStart=150,trackEnd=mapWidth-60;
+    const compressRatio = 0.35;
+    const compressRanges = (data.compress_ranges || []).filter(range =>
+        Array.isArray(range) && range.length === 2 && range.every(Number.isFinite)
+        && range[0] >= first.number && range[1] <= last.number && range[1] > range[0]);
+    const removed = position => compressRanges.reduce((sum, [a, b]) => sum + Math.min(Math.max(position, a), b) - a, 0) * (1 - compressRatio);
+    const span = (last.number - first.number) - compressRanges.reduce((sum, [a, b]) => sum + (b - a) * (1 - compressRatio), 0);
+    const effective = position => position - first.number - removed(position);
+    const positionX = position => first.number === last.number ? (trackStart+trackEnd)/2 : trackStart+effective(position)/span*(trackEnd-trackStart);
+    const layouts = {};
+    for (const direction of ['up','down']) layouts[direction] = layoutLabels(data.trains,direction,positionX);
+    function geometry(compact) {
+        const labelHeight=compact?54:63, laneHeight=compact?72:84, routeGap=compact?44:52;
+        const upLane=Math.max(0,...layouts.up.map(t=>t.lane)), downLane=Math.max(0,...layouts.down.map(t=>t.lane));
+        const upY=Math.max(compact?120:152,routeGap+labelHeight+upLane*laneHeight+8);
+        const downY=upY+(compact?44:58);
+        const stationY=downY+routeGap+labelHeight+downLane*laneHeight+(compact?12:18);
+        return {labelHeight,laneHeight,routeGap,upY,downY,stationY,height:stationY+(compact?50:62)};
+    }
+    const standard=geometry(false), compact=standard.height>420;
+    const {labelHeight,laneHeight,routeGap,upY,downY,stationY,height}=compact?geometry(true):standard;
+    $('screen').classList.toggle('dense-map',compact);
+    const band = document.createElement('div'); band.style.cssText=`position:relative;width:${mapWidth}px;height:${height}px;flex-shrink:0`;
+    if(compact)band.className='compact-map';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg'); svg.setAttribute('width',mapWidth);svg.setAttribute('height',height);svg.style.cssText='position:absolute;left:0;top:0;overflow:visible';band.append(svg);
+    const element = (tag,attrs,parent=svg)=>{const e=document.createElementNS(svg.namespaceURI,tag);for(const [key,value] of Object.entries(attrs))e.setAttribute(key,value);parent.append(e);return e;};
+    for (const y of [upY,downY]) {
+        element('line',{x1:trackStart,y1:y,x2:trackEnd,y2:y,stroke:'#3A3A3F','stroke-width':2});
+        for(const [x1,x2] of [[trackStart-40,trackStart],[trackEnd,trackEnd+40]])element('line',{x1,y1:y,x2,y2:y,stroke:'#3A3A3F','stroke-width':2,'stroke-dasharray':'4 5'});
+    }
+    for (const st of data.stations) {
+        const x=positionX(st.number), current = st.number === data.station_id;
+        element('line',{x1:x,y1:upY+13,x2:x,y2:downY-13,stroke:current?'#F1F1EE':'#26262A','stroke-width':2});
+        if (!current && compressRanges.some(([from, to]) => st.number >= from && st.number <= to)) continue;
+        const name=document.createElement('div');name.className='map-station';name.style.cssText=`left:${x-60}px;width:120px;top:${stationY-(current?4:0)}px;${current?'font-size:22px;font-weight:700;color:#F1F1EE':''}`;name.textContent=st.name;band.append(name);
+    }
+    for (const [direction,y] of [['up',upY],['down',downY]]) {
+        const title=document.createElement('div');title.style.cssText=`position:absolute;left:0;top:${y-10}px;font-size:18px;color:#A1A1A6;line-height:1`;title.textContent=direction==='up'?'京都方面':'大阪方面';band.append(title);
+        const groups=new Map(), marked=new Set();
+        for(const {train} of layouts[direction]) {
+            if(!groups.has(train.position))groups.set(train.position,[]);
+            groups.get(train.position).push(train);
+        }
+        for (const {train,stopped,width,x,left,lane} of layouts[direction]) {
+            const style=colors[train.kind]||colors['普通'], sign=direction==='up'?1:-1;
+            if (!stopped) element('line',{x1:x-sign*22,y1:y,x2:x-sign*5,y2:y,stroke:style[3],'stroke-opacity':0.45,'stroke-width':2});
+            if(!marked.has(train.position)) {
+                const trains=groups.get(train.position),count=trains.length,visible=Math.min(count,3);
+                const marker=element('g',{'class':'train-marker','role':'img','aria-label':`${direction==='up'?'京都方面':'大阪方面'}: 同じ位置に${count}本`});
+                for(let index=0;index<visible;index++) {
+                    const color=(colors[trains[index].kind]||colors['普通'])[3];
+                    element('polygon',{
+                        transform:`translate(${x-sign*6-sign*index*6},${y})`,
+                        points:`0,-9 ${sign*12},0 0,9`,fill:color,
+                        ...(count>1?{stroke:'#0B0B0C','stroke-width':1.5,'stroke-linejoin':'round','paint-order':'stroke fill'}:{}),
+                        ...(index===0?{'data-direction':direction,'data-position':train.position,'data-count':count}:{}),
+                    },marker);
+                }
+                if(count>3)element('text',{x:x+sign*13,y:y+4,fill:'#F1F1EE','font-size':12,'font-weight':500,'text-anchor':sign>0?'start':'end'},marker).textContent=count;
+                marked.add(train.position);
+            }
+            const h=labelHeight;
+            const top=direction==='up'?y-routeGap-h-lane*laneHeight:y+routeGap+lane*laneHeight;
+            const toward=direction==='up'?1:-1, center=left+width/2, edge=direction==='up'?top+h+4:top-4;
+            element('polyline',{points:`${center},${edge} ${center},${edge+toward*6} ${x},${y-toward*20} ${x},${y-toward*11}`,fill:'none',stroke:'#65656B','stroke-width':1});
+            const label=document.createElement('div');label.className='line-label';label.dataset.direction=direction;label.dataset.lane=lane;
+            label.dataset.position=train.position;label.dataset.anchorX=x;label.dataset.anchorY=y;
+            label.style.cssText=`left:${left}px;top:${top}px;width:${width}px;height:${h}px`;
+            label.innerHTML=`<span class="line-kind" style="background:${style[1]};color:${style[2]};box-sizing:border-box;${style[4]?`border:2px solid ${style[4]};`:''}">${esc(style[0])}</span><div class="line-delay" style="color:${train.delay?'#F1F1EE':'#7C7C82'}">${esc(trainDelayText(train,true))}</div>${stopped?`<div class="line-stopped">停止${esc(train.stopped_minutes)}分${train.stopped_lower_bound?'以上':''}</div>`:''}`;
+            band.append(label);
+        }
+    }
+    for(const side of ['osaka','kyoto']) {
+        const up=data.outside['up_'+side],down=data.outside['down_'+side];if(!up&&!down)continue;
+        const count=direction=>{const stopped=data.outside_stopped[direction+'_'+side];return `${data.outside[direction+'_'+side]}本${stopped?'（うち '+stopped+'本停止）':''}`;};
+        const text=`${side==='osaka'?'← ':''}${side==='osaka'?first.name:last.name}より${side==='osaka'?'大阪':'京都'}側にも　京都方面 ${count('up')}・大阪方面 ${count('down')}${side==='kyoto'?' →':''}`;
+        const el=document.createElement('div');el.className='map-outside';el.style.cssText=`${side==='osaka'?'left:110px':'right:20px'};top:${stationY+(compact?32:38)}px`;el.textContent=text;band.append(el);
+    }
+    root.append(band);
+}
+function renderDirection(direction, data) {
+    const col=$('suspended-'+direction), state=field(col,'state');
+    const states={stopped:'止まっています',many_stopped:'多くの列車が止まっています',delayed:'遅れて動いています',normal:'動いています',none:`${trainData?.station_name||''}に向かう列車の情報がありません`};
+    state.textContent=states[data.state];state.style.color=['stopped','many_stopped'].includes(data.state)?'#FF5B2E':data.state==='none'?'#A1A1A6':'#F1F1EE';state.style.fontSize=data.state==='none'?'28px':data.state==='many_stopped'?'32px':'40px';
+    const list=col.querySelector('.next-list'), label=field(col,'next-label');list.replaceChildren(label);
+    label.hidden=data.state==='none';label.textContent=`${trainData?.station_name||''}に次に来る列車`;
+    if(data.state==='none') return;
+    for(const train of data.next.slice(0,2)) {
+        const row=clone('next-row');kindStyle(row,train.kind);field(row,'destination').textContent=train.destination;
+        field(row,'delay').innerHTML=trainDelayMetric(train);
+        field(row,'position').textContent=train.position_text||'';
+        const stopped=field(row,'stopped');
+        if(train.stopped_minutes!=null) renderStopBadge(stopped,{minutes:train.stopped_minutes,lowerBound:!!train.stopped_lower_bound});
+        else { stopped.textContent=train.is_active?'走行中':'';stopped.style.color='#A1A1A6';stopped.style.fontWeight='400'; }
+        list.append(row);
+    }
+}
+function interruptOpeningAssembly() {
+    if(document.documentElement.dataset.assembly==='running')document.dispatchEvent(new Event('signage:assembly-cancel'));
+}
+function render() {
+    interruptOpeningAssembly();
+    const suspended=enabled('trains') && !!lineData?.suspended && !lineData.error;
+    if(!suspended)$('screen').classList.remove('dense-map');
+    $('normal').hidden=suspended;$('suspended').hidden=!suspended;
+    if(trainData) {
+        $('station-name').textContent=trainData.station_name;
+        for(const direction of ['up','down'])renderTrains(direction,trainData[direction+'_trains'],trainData.error);
+    }
+    if(suspended) {
+        $('line-summary').textContent=`${lineData.as_of} 時点の位置　・　走っている ${lineData.total}本のうち ${lineData.stopped}本が止まっています`;
+        renderMap(lineData);
+        for(const direction of ['up','down'])renderDirection(direction,lineData.directions[direction]);
+    }
+    renderBuses();renderDelays();
+}
+let clockOffset=0, demoTimestamp=null;
+function displayTime() { return config.demo ? demoTimestamp : Date.now()+clockOffset; }
+function timeText(date) { return new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(date); }
+function setClockDigits(element, text) {
+    if (element.childElementCount !== text.length) {
+        element.replaceChildren(...Array.from(text, character => {
+            const span = document.createElement('span');
+            span.className = character === ':' ? 'clock-separator' : 'clock-digit';
+            return span;
+        }));
+    }
+    Array.from(text).forEach((character, index) => {
+        element.children[index].textContent = character;
+    });
+}
+function clockTick() {
+    if(config.demo && demoTimestamp===null) {
+        $('clock-date').textContent='記録を読み込み中';
+        setClockDigits($('clock-time'),'--:--');setClockDigits($('clock-seconds'),':--');
+        return;
+    }
+    const date=new Date(displayTime()), time=timeText(date);
+    const parts=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',weekday:'short'}).formatToParts(date);
+    const part=type=>parts.find(p=>p.type===type).value;
+    $('clock-date').textContent=`${part('month')}.${part('day')} ${part('weekday')}`;
+    setClockDigits($('clock-time'), time.slice(0,5));setClockDigits($('clock-seconds'), time.slice(5));
+    updateOperationAges();
+}
+async function clockSync() {
+    const samples=await Promise.allSettled(Array.from({length:8},async()=>{
+        const start=performance.now();const response=await fetch('api/time',{signal:AbortSignal.timeout(10000),cache:'no-store'});
+        if(!response.ok)throw new Error(response.status);
+        const data=await response.json(),rtt=performance.now()-start;
+        return {offset:data.ts*1000+rtt/2-Date.now(),error:(rtt+data.ntp_rtt_ms)/2};
+    }));
+    const best=samples.filter(s=>s.status==='fulfilled').map(s=>s.value).sort((a,b)=>a.error-b.error)[0];
+    if(best)clockOffset=best.offset;clockTick();
+}
+let failures=0,lastTrainSuccess=null;
+const failedEndpoints=new Set();
+function reconnectBadge() {
+    $('reconnect-badge').hidden=failedEndpoints.size===0;
+    $('retry-count').textContent=failures+'回目';
+    $('last-trains').textContent=lastTrainSuccess?timeText(new Date(lastTrainSuccess)):'未取得';
+}
+async function api(name) {
+    let succeeded=false;
+    try {
+        const response=await fetch('api/'+name,{signal:AbortSignal.timeout(10000),cache:'no-store'});
+        if(response.status>=500)throw new Error('HTTP '+response.status);
+        if(!response.ok)return null;
+        const data=await response.json();succeeded=true;
+        if(name==='trains')lastTrainSuccess=Date.now()+clockOffset;
+        failedEndpoints.delete(name);
+        if(failedEndpoints.size===0)failures=0;
+        return data;
+    } catch(error) {
+        if(name!=='delays'){failures++;failedEndpoints.add(name);}
+        return null;
+    } finally {
+        openingAssembly.settled.add(name);if(!succeeded)openingAssembly.failed.add(name);
+        reconnectBadge();
+    }
+}
+async function fetchTrains() {
+    const [trains,line]=await Promise.all([api('trains'),api('line')]);
+    if(trains)trainData=trains;if(line)lineData=line;render();
+    setTimeout(fetchTrains,failedEndpoints.has('trains')||failedEndpoints.has('line')?15000:60000);
+}
+async function fetchBuses() {
+    const data=await api('buses');if(data)busData=data;renderBuses();
+    setTimeout(fetchBuses,failedEndpoints.has('buses')?15000:120000);
+}
+async function fetchDelays() {
+    const data=await api('delays');if(data)delayData=data;renderDelays();setTimeout(fetchDelays,120000);
+}
+document.fonts.ready.then(render);
+clockTick();
+if(config.demo) {
+    const script=document.createElement('script');
+    script.src=location.pathname.replace(/\/$/,'')+'/player.js';
+    script.onerror=()=>{ $('demo-controls').hidden=false; $('demo-controls').textContent='デモを読み込めませんでした。再読み込みしてください。'; };
+    document.body.append(script);
+} else {
+    clockSync();setInterval(clockTick,1000);setInterval(clockSync,300000);
+    if(enabled('trains'))fetchTrains();if(enabled('buses'))fetchBuses();if(enabled('delays'))fetchDelays();
+}
+
+</script>
+<script type="module">
+if(document.documentElement.dataset.assembly==='pending') {
+    import(new URL('assets/opening.js',location.href).href).then(({startOpening})=>startOpening({
+        doc:document,boot:openingAssembly,
+        required:[...(enabled('trains')?['trains','line']:[]),...(enabled('buses')?['buses']:[]),...(enabled('delays')?['delays']:[])],
+        critical:enabled('trains')?['trains','line']:[],
+        hasError:()=>[trainData,lineData].some(data=>data?.error)
+    })).catch(()=>{
+        clearTimeout(openingAssembly.timer);document.documentElement.dataset.assembly='skipped';
+        document.documentElement.classList.remove('assembly-pending');
+        document.dispatchEvent(new Event('signage:assembly-cancel'));
+    });
+}
+</script>
+</body></html>

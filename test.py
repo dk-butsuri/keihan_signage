@@ -1,15 +1,16 @@
-from keihan_tracker.delay_tracker import get_ekispert_delay, get_yahoo_delay
-import delay_ai
-import dotenv
-dotenv.load_dotenv()
-from os import environ
+# 運行情報の取得を手元で確かめるスクリプト（config.yml の delays を使う）
 import asyncio
+import yaml
+import operation_info
+
 
 async def main():
-    #res = await delay_ai.convert(await get_ekispert_delay(environ["EKISPERT_API_KEY"]))
-    res = await get_yahoo_delay(4)
-    
-    for i in res:
-        print(i)
+    with open("config.yml", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f).get("delays") or {}
+    rows, error = await operation_info.fetch(operation_info.build_tracker(cfg), cfg)
+    if error:
+        print("取得に失敗した取得先:", error)
+    for r in rows:
+        print(f"{r['line']}: {r['status']}  ({r['announced_time']})\n{r['detail']}\n")
 
 asyncio.run(main())
