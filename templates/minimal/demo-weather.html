@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ demo.title }} · 京阪サイネージ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif;line-height:1.7;font-variant-numeric:tabular-nums}
+main{max-width:1320px;margin:auto;padding:32px 32px 56px}a{color:#D9D9D6}a:hover{text-decoration:none}
+header nav{display:flex;align-items:center;justify-content:space-between;gap:16px}
+h1{font-size:32px;line-height:1.4;font-weight:500;margin:24px 0 10px}.intro{color:#A1A1A6;margin:0;max-width:52em}
+h2{font-size:20px;font-weight:500;margin:0 0 12px}
+button,select{font:inherit;color:#F1F1EE;background:#202024;border:1px solid #4A4A50;border-radius:4px}
+:focus-visible{outline:2px solid #F1F1EE;outline-offset:2px}
+section{margin-top:32px}
+.stage{position:relative;border:1px solid #26262A;background:#0B0B0C;overflow:hidden}
+.board{position:absolute;left:0;top:0;width:1920px;height:176px;transform-origin:0 0;padding:44px 56px 0;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif}
+.sig{height:104px;display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:24px;border-bottom:1px solid #26262A}
+.sig-station{font-size:34px;font-weight:500;letter-spacing:.04em}
+.sig-clock{display:flex;align-items:flex-end;gap:28px}.sig-date{font-size:20px;color:#A1A1A6;letter-spacing:.08em;padding-bottom:10px}
+.sig-time{font-size:92px;font-weight:300;line-height:.9;letter-spacing:-.02em}
+.empty-note{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#7C7C82;font-size:15px;pointer-events:none}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px 28px;margin-top:16px}
+.time{display:flex;align-items:center;gap:12px}.time input{width:220px;accent-color:#F1F1EE}.time output{font-size:20px;min-width:4em}
+.presets{display:flex;flex-wrap:wrap;gap:8px}.presets button{min-height:40px;padding:4px 14px;cursor:pointer}.presets button[aria-pressed=true]{background:#F1F1EE;color:#0B0B0C;border-color:#F1F1EE}
+.story{margin:12px 0 0;color:#D9D9D6;min-height:1.7em}
+.notice{margin:12px 0 0;color:#F2D600}
+.table{display:grid;grid-template-columns:110px minmax(220px,1fr) auto 168px minmax(220px,1fr);border-top:1px solid #26262A}
+.row{display:contents}.row>*{padding:14px 12px;border-bottom:1px solid #26262A;min-width:0}
+.head>*{color:#A1A1A6;font-size:14px;line-height:1.5;padding-bottom:10px;align-self:end}.head b{display:block;color:#F1F1EE;font-size:16px;font-weight:500}
+.name{font-size:18px;font-weight:500}.name small{display:block;color:#7C7C82;font-size:13px;font-weight:400}
+.warn select{min-height:36px;padding:2px 8px;max-width:100%}
+.pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}.pills button{font-size:13px;padding:1px 8px;border-radius:12px;cursor:pointer;color:#A1A1A6}.pills button[aria-pressed=true]{background:#F1F1EE;color:#0B0B0C;border-color:#F1F1EE}.pills button:disabled{opacity:.35;cursor:default}
+.strip,.ruler{display:grid;grid-template-columns:repeat(14,30px);gap:2px}
+.ruler span{font-size:12px;color:#7C7C82;text-align:center}.ruler.inline{display:none;margin-bottom:4px}.ruler span.day{color:#F1F1EE;font-weight:700}
+.ruler-window{grid-column:var(--from)/var(--to);height:4px;background:#F2D600;border-radius:2px;margin-top:2px}
+.strip button{height:34px;padding:0;font-size:11px;line-height:1.1;cursor:pointer;border-radius:3px;background:#1B1B1F;border-color:#303036;color:#7C7C82}
+.strip button.advisory{background:#F2D600;border-color:#F2D600;color:#0B0B0C}.strip button.warning{background:#E8290B;border-color:#E8290B;color:#fff}
+.strip button.danger{background:#A3129E;border-color:#A3129E;color:#fff}.strip button.emergency{background:#0C000C;border-color:#fff;color:#fff}
+.strip button.past{opacity:.3}.strip button.later{opacity:.6}.strip button.window{box-shadow:0 3px 0 #F2D600}
+.series-opts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px;font-size:13px;color:#A1A1A6}.series-opts select{font-size:13px;padding:1px 4px}
+.poss{display:flex;align-items:flex-start;gap:6px}.poss button{min-width:64px;padding:4px 8px;cursor:pointer;font-size:14px;line-height:1.3}.poss button small{display:block;font-size:11px;color:#A1A1A6}
+.poss button.high{border-color:#F1F1EE;box-shadow:inset 0 0 0 1px #F1F1EE}.poss button.medium{border-color:#7C7C82;color:#A1A1A6}
+.na{color:#4A4A50;font-size:14px}
+.result{font-size:14px;line-height:1.6;color:#A1A1A6}.result .chip{display:inline-block;margin-bottom:4px;padding:2px 8px;border-radius:3px;font-size:14px;font-weight:700;color:#fff}
+.result .chip.l3{background:#E8290B}.result .chip.l4{background:#A3129E}.result .chip.l5{background:#0C000C;box-shadow:inset 0 0 0 1px #fff}
+.result .chip.soon{color:#F2D600;box-shadow:inset 0 0 0 1px #F2D600;font-weight:500}.result .chip.possibility{color:#F1F1EE;box-shadow:inset 0 0 0 1px #7C7C82;font-weight:500}
+.result .none{color:#7C7C82}
+.legend{display:flex;flex-wrap:wrap;gap:6px 20px;margin-top:14px;font-size:13px;color:#A1A1A6}.legend i{display:inline-block;width:14px;height:14px;border-radius:2px;vertical-align:-2px;margin-right:6px}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.facts div{background:#151517;border:1px solid #26262A;border-radius:6px;padding:16px 18px}.facts h3{margin:0 0 6px;font-size:16px;font-weight:500}.facts p{margin:0;color:#A1A1A6;font-size:14px}
+.error{color:#FF5B2E}
+@media(max-width:1100px){
+ .table{display:block}.row{display:block;border-bottom:1px solid #26262A;padding:12px 0}.row>*{border:0;padding:6px 0}.head{display:none}
+ .row>[data-label]::before{content:attr(data-label);display:block;color:#7C7C82;font-size:13px}
+ .ruler.inline{display:grid}
+ .facts{grid-template-columns:1fr}
+}
+@media(max-width:680px){main{padding:24px 16px 40px}h1{font-size:27px}.strip,.ruler{grid-template-columns:repeat(14,minmax(18px,1fr))}.strip button{font-size:9px}.time input{width:160px}}
+{% include 'weather-chips.css' %}
+</style></head><body><main>
+<header><nav><a id="weather-back" href="/demo">← デモ一覧</a></nav>
+<h1>{{ demo.title }}</h1>
+<p class="intro">気象庁の3つの情報を切り替えると、画面上部の札がどう変わるかを試せます。札の判定は本番のサイネージと同じ処理で行っています。対象は寝屋川市・枚方市・交野市・守口市・門真市・四條畷市・大東市の7市、日付は架空です。</p></header>
+
+<section aria-label="画面の上部">
+<div class="stage" id="stage"><div class="board" id="board"><div class="sig">
+<div class="sig-station">香里園</div>
+<div class="wx" id="weather" hidden><div class="wx-label"><b data-weather="title">気象警報</b><span data-weather="time"></span><span>出典 気象庁（物理部が加工）</span></div><div class="wx-items" data-weather="items"></div></div>
+<div class="sig-clock"><div class="sig-date">11.13 金</div><div class="sig-time" id="board-time">12:00</div></div>
+</div></div><div class="empty-note" id="empty-note">いまは札が出ていません</div></div>
+<div class="controls">
+<label class="time">いまの時刻<input type="range" id="hour" min="6" max="23" step="1" value="12"><output id="hour-label">12:00</output></label>
+<div class="presets" id="presets" role="group" aria-label="場面"></div>
+</div>
+<p class="story" id="story" aria-live="polite"></p>
+<p class="notice" id="notice" hidden></p>
+<p class="error" id="error" hidden></p>
+</section>
+
+<section aria-label="札の決まり方">
+<h2>札の決まり方</h2>
+<div class="table" id="table">
+<div class="row head"><span>現象</span><span><b>① 発表中の警報</b>市ごと。いま出ているもの</span><span><b>② 警報の予想時系列</b>市ごと・3時間ごと。マスを押すと段階が変わる<div class="ruler" id="ruler"></div></span><span><b>③ 警報級の可能性</b>大阪府全体で1つ。押すと なし→中→高</span><span><b>画面の札</b>と、そうなる理由</span></div>
+</div>
+<div class="legend"><span><i style="background:#F2D600"></i>注意報級（レベル2相当）</span><span><i style="background:#E8290B"></i>警報級（レベル3相当）</span><span><i style="background:#A3129E"></i>危険警報級（レベル4相当）</span><span><i style="background:#0C000C;box-shadow:inset 0 0 0 1px #fff"></i>特別警報級（レベル5相当）</span><span><i style="background:#1B1B1F;box-shadow:0 3px 0 #F2D600"></i>黄色の下線＝これから12時間（予告の対象）</span><span>時刻の太字の 0 から先は明日</span></div>
+</section>
+
+<section aria-label="3つの情報の違い">
+<h2>3つの情報の違い</h2>
+<div class="facts">
+<div><h3>① 発表中の警報</h3><p>いま実際に出ている警報・注意報。市ごとに出る。本校の基準に当たるものだけを、塗った札にする。注意報は札にしない。</p></div>
+<div><h3>② 警報の予想時系列</h3><p>市ごと・3時間ごとに、この先どの段階になりそうかを示す。気象庁のサイトの「警報に切り替える可能性が高い」はこれ。12時間以内に警報級になる種類を、黄色の枠の札にする。</p></div>
+<div><h3>③ 警報級の可能性</h3><p>今日・明日に警報級になる見込みを「高・中」で示す。大阪府全体で1つの、粗く早めの目安。「高」だけを灰色の枠の札にする。</p></div>
+</div>
+<p class="intro" style="margin-top:16px">②と③はふだんから毎日発表されていて、荒れそうな日は両方が同時に「危ない」と言っている。札は現象ごとに1枚だけにし、① → ② → ③ の順に、先に当てはまったものを出す。</p>
+</section>
+</main><script>
+const script=document.createElement('script');script.src=location.pathname.replace(/\/$/,'')+'/player.js';
+script.onerror=()=>{const e=document.getElementById('error');e.hidden=false;e.textContent='デモを読み込めませんでした。再読み込みしてください。';};
+document.body.append(script);
+</script></body></html>

@@ -62,7 +62,7 @@ def test_catalog_and_unknown_scenarios(recording):
         response = client.get(path)
         assert response.status_code == 200
         assert 'デモを選ぶ' in response.text
-        assert response.text.count('data-demo-id=') == 7
+        assert response.text.count('data-demo-id=') == 8
         assert '架空の想定' in response.text and '実記録' in response.text
     for path in ['/demo/missing', '/demo/missing/data', '/demo/missing/player.js', '/demo/config.yml']:
         assert client.get(path).status_code == 404
@@ -180,3 +180,28 @@ def test_archive_uses_timetable_from_that_time_and_never_network(tmp_path):
         asyncio.run(tracker._get(url))
     with pytest.raises(RuntimeError, match='cannot access the network'):
         asyncio.run(tracker._request(url, {}))
+
+
+def test_weather_demo_uses_the_live_rules_without_live_state(monkeypatch):
+    monkeypatch.setattr(main, '_cfg', {'features': {'trains': False}})
+    monkeypatch.setattr(main, '_weather', None)
+    client = TestClient(main.app)
+    page = client.get('/demo/weather-cards/')
+    assert page.status_code == 200 and 'data-weather="items"' in page.text and '.wx-chip' in page.text
+    assert 'renderWeather' in client.get('/demo/weather-cards/weather.js').text
+    assert 'PRESETS' in client.get('/demo/weather-cards/player.js').text
+    state = {
+        'hour': 12,
+        'warnings': [{'element': 'storm', 'stage': 'warning', 'cities': ['寝屋川市', '枚方市']},
+                     {'element': 'wave', 'stage': 'warning', 'cities': ['寝屋川市']}],
+        'series': [{'element': 'rain', 'cities': ['寝屋川市'], 'snow': False, 'blocks': [{'hour': 18, 'stage': 'warning'}]},
+                   {'element': 'snow', 'cities': ['寝屋川市'], 'snow': False, 'blocks': [{'hour': 30, 'stage': 'warning'}]}],
+        'possibility': [{'element': 'storm', 'period': 'tomorrow', 'value': 'high'},
+                        {'element': 'snow', 'period': 'tomorrow', 'value': 'medium'}],
+    }
+    data = client.get('/demo/weather-cards/weather', params={'state': json.dumps(state)}).json()
+    assert [(w['name'], w['cities']) for w in data['warnings']] == [('暴風警報', ['寝屋川市', '枚方市'])]
+    assert data['previews'] == [{'kind': 'soon', 'when': '18時ごろから', 'name': '大雨警報', 'cities': ['寝屋川市']}]
+    assert client.get('/demo/weather-cards/weather', params={'state': '{"warnings":[{"element":"x"}]}'}).status_code == 400
+    assert client.get('/demo/normal/weather').status_code == 404
+    assert client.get('/demo/weather-cards/data').status_code == 404

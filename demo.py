@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from demo_scenarios import SCENARIOS, display_patterns, static_scenario
+import weather_demo
 
 
 router = APIRouter()
@@ -13,6 +14,7 @@ DATA_FILE = Path(__file__).parent / "demo-data/replay.json"
 PLAYER_FILE = Path(__file__).parent / "templates/minimal/demo.js"
 PATTERN_PLAYER_FILE = PLAYER_FILE.with_name("demo-patterns.js")
 INTRO_PLAYER_FILE = PLAYER_FILE.with_name("demo-intro.js")
+WEATHER_PLAYER_FILE = PLAYER_FILE.with_name("demo-weather.js")
 ASSEMBLY_PLAYER_FILE = PLAYER_FILE.with_name("assembly.js")
 MARKED_FILE = PLAYER_FILE.with_name("marked.min.js")
 README_FILE = Path(__file__).parent / "README.md"
@@ -85,16 +87,33 @@ async def data(scenario_id: str):
         return _recording()
     if scenario["mode"] == "gallery":
         return JSONResponse(display_patterns(), headers=_HEADERS)
-    if scenario["mode"] == "intro":
+    if scenario["mode"] in ("intro", "weather"):
         raise HTTPException(404, "このデモに運行データはありません")
     return JSONResponse(static_scenario(scenario_id), headers=_HEADERS)
+
+
+@router.api_route("/demo/{scenario_id}/weather", methods=["GET", "HEAD"])
+async def weather_cards(scenario_id: str, state: str = "{}"):
+    if _scenario(scenario_id)["mode"] != "weather":
+        raise HTTPException(404, "このデモに気象警報の判定はありません")
+    try:
+        return JSONResponse(weather_demo.evaluate(state), headers=_HEADERS)
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(400, f"状況の指定が読めません: {error}")
 
 
 @router.api_route("/demo/{scenario_id}/player.js", methods=["GET", "HEAD"])
 async def player(scenario_id: str):
     scenario = _scenario(scenario_id)
-    player_file = {"gallery": PATTERN_PLAYER_FILE, "intro": INTRO_PLAYER_FILE}.get(scenario["mode"], PLAYER_FILE)
+    player_file = {"gallery": PATTERN_PLAYER_FILE, "intro": INTRO_PLAYER_FILE, "weather": WEATHER_PLAYER_FILE}.get(scenario["mode"], PLAYER_FILE)
     return FileResponse(player_file, media_type="text/javascript", headers=_HEADERS)
+
+
+@router.api_route("/demo/{scenario_id}/weather.js", methods=["GET", "HEAD"])
+async def weather_renderer(scenario_id: str):
+    if _scenario(scenario_id)["mode"] != "weather":
+        raise HTTPException(404, "このデモに気象警報の札はありません")
+    return FileResponse(PLAYER_FILE.with_name("weather.js"), media_type="text/javascript", headers=_HEADERS)
 
 
 @router.api_route("/demo/{scenario_id}/assembly.js", methods=["GET", "HEAD"])
@@ -110,6 +129,9 @@ async def display(scenario_id: str, request: Request):
     scenario = _scenario(scenario_id)
     if scenario["mode"] == "intro":
         return templates.TemplateResponse(request, "demo-intro.html",
+                                          {"demo": scenario, "demos": _catalog()}, headers=_HEADERS)
+    if scenario["mode"] == "weather":
+        return templates.TemplateResponse(request, "demo-weather.html",
                                           {"demo": scenario, "demos": _catalog()}, headers=_HEADERS)
     if scenario["mode"] == "gallery":
         return templates.TemplateResponse(request, "demo-patterns.html",

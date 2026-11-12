@@ -17,9 +17,9 @@
 <div class="catalog-sections">
 {% for mode, heading in [('replay', '実際の記録'), ('gallery', '表示の見本'), ('static', '状況を想定した表示')] %}
 <section class="catalog-section {{ mode }}" aria-label="{{ heading }}"><h2>{{ heading }}</h2><div class="grid">
-{% for demo in demos if demo.mode == mode or (mode == 'gallery' and demo.mode == 'intro') %}
+{% for demo in demos if demo.mode == mode or (mode == 'gallery' and demo.mode in ('intro', 'weather')) %}
 <a class="card {{ 'recorded' if mode == 'replay' else '' }}" data-demo-id="{{ demo.id }}" href="/demo/{{ demo.id }}" {% if not demo.available %}aria-disabled="true" tabindex="-1"{% endif %}>
-<span class="tag">{{ '起動アニメーション' if demo.mode == 'intro' else '実記録 · 時間を動かして再生' if mode == 'replay' else '表示パターン一覧' if mode == 'gallery' else '架空の想定 · 表示のみ' }}</span>
+<span class="tag">{{ '起動アニメーション' if demo.mode == 'intro' else '操作して試す' if demo.mode == 'weather' else '実記録 · 時間を動かして再生' if mode == 'replay' else '表示パターン一覧' if mode == 'gallery' else '架空の想定 · 表示のみ' }}</span>
 <h3>{{ demo.title }}</h3><p>{{ demo.description }}</p><span class="open">{{ 'デモを開く →' if demo.available else '記録を準備中' }}</span>
 </a>
 {% endfor %}
