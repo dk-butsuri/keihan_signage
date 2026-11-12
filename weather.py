@@ -132,7 +132,7 @@ def _when(start: datetime.datetime, now: datetime.datetime) -> str:
 
 
 def _soon(views: Sequence, now: datetime.datetime) -> list[dict]:
-    found: dict[Element, dict] = {}
+    found: dict[Element, list[tuple[datetime.datetime, int, str, str]]] = {}
     for view in views:
         snow_starts = {c.start for c in view.timeseries if c.property == "風" and c.condition == "風雪"}
         for cell in view.timeseries:
@@ -149,24 +149,18 @@ def _soon(views: Sequence, now: datetime.datetime) -> list[dict]:
             if _active_stage(view, element) >= int(stage):
                 continue
             key = Element.STORM if element == Element.SNOWSTORM else element
-            entry = found.get(key)
-            better = entry is None or int(stage) > entry["stage"] or (
-                int(stage) == entry["stage"] and cell.start < entry["start"])
-            if better:
-                cities = entry["cities"] if entry and int(stage) == entry["stage"] else []
-                entry = found[key] = {"stage": int(stage), "start": cell.start,
-                                      "name": label + _STAGE_SUFFIX[stage], "cities": cities}
-            if int(stage) == entry["stage"]:
-                city = _short(view.name)
-                if city not in entry["cities"]:
-                    entry["cities"].append(city)
+            found.setdefault(key, []).append((cell.start, int(stage), label + _STAGE_SUFFIX[stage], _short(view.name)))
     order = {_short(v.name): i for i, v in enumerate(views)}
     result = []
     for key in _ELEMENT_ORDER:
-        entry = found.get(key)
-        if entry:
-            result.append({"kind": "soon", "when": _when(entry["start"], now), "name": entry["name"],
-                           "element": key, "cities": sorted(entry["cities"], key=order.get)})
+        candidates = found.get(key)
+        if not candidates:
+            continue
+        # 段階の高さより早さを優先する。2時間後の警報と5時間後の特別警報なら、2時間後の警報を出す
+        start = min(c[0] for c in candidates)
+        _, stage, name, _ = max((c for c in candidates if c[0] == start), key=lambda c: c[1])
+        cities = sorted({c[3] for c in candidates if c[1] >= stage}, key=order.get)
+        result.append({"kind": "soon", "when": _when(start, now), "name": name, "element": key, "cities": cities})
     return result
 
 

@@ -115,3 +115,16 @@ def test_possibility_high_only_and_not_duplicated():
 
 def test_nothing_to_show():
     assert weather.summarize([_view("寝屋川市", [WAVE, RAIN_ADVISORY])], NOW) == {"warnings": [], "previews": []}
+
+
+def test_soon_prefers_earlier_over_higher():
+    # 2時間後に警報級、5時間後に特別警報級なら、2時間後の警報を出す
+    views = [
+        _view("寝屋川市", timeseries=[
+            _series("大雨浸水危険度", datetime.datetime(2026, 11, 13, 15, tzinfo=JST), "31"),
+            _series("大雨浸水危険度", datetime.datetime(2026, 11, 13, 18, tzinfo=JST), "51"),
+        ]),
+        _view("枚方市", timeseries=[_series("大雨浸水危険度", datetime.datetime(2026, 11, 13, 18, tzinfo=JST), "51")]),
+    ]
+    previews = weather.summarize(views, NOW)["previews"]
+    assert previews == [{"kind": "soon", "when": "15時ごろから", "name": "大雨警報", "cities": ["寝屋川市", "枚方市"]}]
