@@ -18,6 +18,7 @@ from keihan_tracker.keihan_train.tracker import ActiveTrainData
 from keihan_tracker.keihan_train.position_calculation import calc_position
 import operation_info
 import bus_timetable
+import weather
 from demo import router as demo_router
 import dotenv
 dotenv.load_dotenv()
@@ -333,6 +334,32 @@ async def update_delay_loop():
         await asyncio.sleep(_cfg["intervals"]["delay_seconds"])
 
 
+_weather: Optional[weather.WeatherWatcher] = None
+# 取得できない時間がこれより長くなったら、古い警報を出し続けないよう札を消す
+WEATHER_STALE = datetime.timedelta(minutes=10)
+
+
+async def update_weather_loop():
+    global _weather
+    while True:
+        cfg = _cfg.get("weather") or {}
+        areas = cfg.get("areas") or weather.DEFAULT_AREAS
+        try:
+            if _weather is None or _weather.areas != list(areas):
+                _weather = weather.WeatherWatcher(areas, user_agent="keihan_signage (+https://github.com/dk-butsuri/keihan_signage)")
+            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching weather warnings...")
+            await asyncio.to_thread(_weather.update)
+            if _weather.error:
+                print(f"Weather fetch partly failed: {_weather.error}")
+            print("Weather fetch complete.")
+        except Exception as e:
+            if _weather is not None:
+                _weather.error = str(e)
+            print(f"Error in weather fetch: {e}")
+        # 気象庁の高頻度フィードは60秒より短い間隔で読めない
+        await asyncio.sleep(max(60, _cfg.get("intervals", {}).get("weather_seconds", 60)))
+
+
 async def _reload_config() -> None:
     global _cfg
     old_features = dict(_cfg.get("features", {}))
@@ -343,6 +370,7 @@ async def _reload_config() -> None:
         "trains": (update_train_loop, True),
         "buses":  (update_bus_loop,  False),
         "delays": (update_delay_loop, False),
+        "weather": (update_weather_loop, False),
     }
     for key, (loop_fn, needs_init) in task_map.items():
         was_on = old_features.get(key, True)
@@ -384,6 +412,9 @@ async def lifespan(app: FastAPI):
 
     if _cfg["features"]["delays"]:
         _tasks["delays"] = asyncio.create_task(update_delay_loop())
+
+    if _cfg["features"].get("weather", True):
+        _tasks["weather"] = asyncio.create_task(update_weather_loop())
 
     yield
 
@@ -678,7 +709,7 @@ def _ordered_trains(station, min_minutes: int, max_per_dir: int, include_positio
 
 @app.api_route("/assets/{name}", methods=["GET", "HEAD"])
 async def screen_asset(name: str):
-    if name not in ("assembly.js", "opening.js"):
+    if name not in ("assembly.js", "opening.js", "weather.js"):
         raise HTTPException(404, "Asset not found")
     return FileResponse(Path(__file__).parent / "templates" / "minimal" / name,
                         media_type="text/javascript", headers={"Cache-Control": "no-store"})
@@ -794,6 +825,23 @@ async def get_delays():
     groups = latest_delay_groups or [DelayGroup(**g) for g in operation_info.groups(None, _cfg.get("delays") or {})]
     return DelayResponse(delays=latest_delay_data, groups=groups, error=latest_delay_error)
 
+@app.get("/api/weather")
+async def get_weather():
+    now = datetime.datetime.now(JST)
+    enabled = _cfg.get("features", {}).get("weather", True)
+    w = _weather
+    fresh = bool(w and w.summary is not None and w.last_success and now - w.last_success <= WEATHER_STALE)
+    summary = w.summary if fresh else None
+    return {
+        "enabled": enabled,
+        "available": enabled and fresh,
+        "as_of": w.last_success.astimezone(JST).strftime("%H:%M") if fresh else None,
+        "warnings": summary["warnings"] if summary else [],
+        "previews": summary["previews"] if summary else [],
+        **weather.area_labels(w.areas if w else (_cfg.get("weather") or {}).get("areas") or weather.DEFAULT_AREAS),
+        "error": w.error if w else None,
+    }
+
 @app.get("/api/status")
 async def get_status():
     """管理画面向けに、各情報を最後に取得できた時刻と、いまの判定をまとめて返す。"""
@@ -827,6 +875,13 @@ async def get_status():
             "affected": len(latest_delay_data),
             "error": latest_delay_error,
             "interval_seconds": _cfg.get("intervals", {}).get("delay_seconds"),
+        },
+        "weather": {
+            "enabled": features.get("weather", True),
+            "last_success": iso(_weather.last_success if _weather else None),
+            "warnings": len(_weather.summary["warnings"]) if _weather and _weather.summary else 0,
+            "error": _weather.error if _weather else None,
+            "interval_seconds": max(60, _cfg.get("intervals", {}).get("weather_seconds", 60)),
         },
     }
 

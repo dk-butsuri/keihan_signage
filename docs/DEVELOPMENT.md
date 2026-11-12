@@ -132,6 +132,25 @@ docker compose up -d --no-deps transit
 
 互換性のテストは、アプリの依存と pytest を入れた環境で `python -m pytest tests -q` を実行します。
 
+### 気象警報（pyjmaxml）
+
+気象警報は [pyjmaxml](https://github.com/dk-butsuri/pyjmaxml) の `Tracker` で、気象庁の防災情報XML（PULL型配信）から取得します。
+PyPI に無いので、train_operation_info と同じく GitHub のコミットに固定しています。
+
+- `weather.py` が、`Tracker` の区域ごとの結果から札の中身（`/api/weather` の `warnings`・`previews`）を作ります。
+  `main.py` の `update_weather_loop` が別スレッドで `Tracker.update()` を呼び、そろった結果だけを保ちます。
+- 見る区域は `weather.areas`（警報の区域名。省略時は7市）、表示のオンオフは `features.weather` です。
+- 気象庁の高頻度フィードは60秒より短い間隔で読めないので、`intervals.weather_seconds` は60未満にしても60秒になります。
+- 起動して最初の更新では過去数日分の長期フィードを読むため、2分ほどかかります。その間 `available` は false で、札は出ません。
+  `Tracker` は状態を保存しないので、再起動のたびにこの読み直しが起きます。
+- 最後に取得できてから10分を過ぎたら `available` を false にして札を消します（画面側でも、10分取得できなければ消します）。
+- 黄色の予告は「気象警報・注意報時系列情報（VPWP50）」の危険度から作ります。pyjmaxml は危険度をコードのまま返すので、
+  コードの意味は気象庁の解説資料の別表4（特別警報級50・警報級30・警戒レベル3〜5相当31・41・51）に従って `weather.py` に書いています。
+- 札の描画は `templates/minimal/weather.js` で、サイネージと時計の画面（`clock/index.html`）の両方が読み込みます。
+  時計の画面は controller 経由で開くので、`/transit/api/weather` と `/transit/assets/weather.js` を読みます。
+- 画面の確認は、`/api/weather` を Playwright の `page.route` で差し替えると、警報が出ていない日でも行えます。
+- `python -m pytest tests/test_weather.py` で、本校の基準・並び順・予告の条件を確認します。
+
 ## 画面と列車位置
 
 画面は1920×1080を基準にしています（テーマの切り替えは2026年11月に廃止し、minimal だけにしました）。

@@ -47,7 +47,7 @@ const groups=['京阪','大阪メトロ','JR','私鉄'].map(name=>({name,mark:'�
         await finish(page);await cleaned(page);
         const baseline=await view({width,height,off:true});await baseline.page.waitForFunction(()=>trainData&&busData&&delayData);await baseline.page.evaluate(()=>document.fonts.ready);
         assert.deepEqual(await geometry(page),await geometry(baseline.page),`${width}x${height} changed layout`);
-        assert.equal(baseline.requests.filter(name=>name.includes('/assets/')).length,0);
+        assert.equal(baseline.requests.filter(name=>name.includes('/assets/')&&!name.endsWith('/weather.js')).length,0);
         await page.evaluate(()=>{trainData.up_trains[0].destination='樟葉';render();});assert.equal(await state(page),'completed');await cleaned(page);
         await baseline.page.close();await page.close();
     }

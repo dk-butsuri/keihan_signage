@@ -1,4 +1,5 @@
 keihan-tracker==2.8.0
+pyjmaxml @ git+https://github.com/dk-butsuri/pyjmaxml.git@2641a4035d00203fa771bf866db87b04cf17bc73
 train_operation_info @ git+https://github.com/dk-butsuri/train_operation_info.git@fe53ac75db924ef5b6820629865a4a513e0ffdd3
 fastapi
 jinja2

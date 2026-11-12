@@ -191,9 +191,33 @@ span.operation-compact-lines { color:#7C7C82; }
 #normal-up-list > .empty, #normal-down-list > .empty, #normal-bus-list > .empty { grid-row:1 / -1; align-self:start; }
 #suspended-up, #suspended-down { flex:510 1 0 !important; }
 #suspended-buses, #suspended-delays { width:auto !important; flex:340 1 0; min-width:0; }
+
+.wx { align-self:flex-end; display:flex; align-items:center; gap:26px; min-height:80px; margin:0 auto 0 28px; padding-left:28px; border-left:1px solid #26262A; white-space:nowrap; }
+#screen.has-operations .wx, #screen.dense-map .wx { min-height:60px; }
+.wx[hidden] { display:none; }
+.wx-label { display:flex; flex-direction:column; gap:6px; line-height:1; }
+.wx-label b { font-size:18px; font-weight:500; color:#A1A1A6; letter-spacing:.06em; }
+.wx-label span { font-size:14px; color:#7C7C82; }
+.wx-items { display:flex; flex-direction:column; gap:8px; }
+.wx.many .wx-items { display:grid; grid-auto-flow:column; grid-template-rows:auto auto; column-gap:30px; row-gap:8px; }
+.wx-item { display:flex; align-items:center; gap:14px; line-height:1; }
+.wx-chip { display:inline-flex; align-items:baseline; padding:7px 13px 8px; border-radius:4px; font-size:24px; font-weight:700; color:#fff; letter-spacing:.02em; }
+.wx-chip .wx-lv { font-size:15px; font-weight:500; margin-right:8px; opacity:.9; }
+.wx-chip.l3 { background:#E8290B; }
+.wx-chip.l4 { background:#A3129E; }
+.wx-chip.l5 { background:#0C000C; box-shadow:inset 0 0 0 2px #fff; }
+.wx-chip.pre { background:transparent; font-weight:500; }
+.wx-chip.pre .wx-lv { opacity:1; font-weight:700; }
+.wx-chip.soon { color:#F2D600; box-shadow:inset 0 0 0 2px #F2D600; }
+.wx-chip.possibility { color:#F1F1EE; box-shadow:inset 0 0 0 2px #7C7C82; }
+.wx-cities { font-size:22px; font-weight:500; color:#F1F1EE; }
+.wx-cities i { font-style:normal; color:#7C7C82; margin:0 1px; }
+.wx.one .wx-chip { font-size:32px; padding:10px 18px 11px; }
+.wx.one .wx-cities { font-size:28px; }
 </style></head><body>
 <div id="screen" style="width: 1920px; height: 1080px; box-sizing: border-box; padding: 44px 56px; display: flex; flex-direction: column; background: #0B0B0C; color: #F1F1EE; font-family: 'Zen Kaku Gothic New', sans-serif; font-variant-numeric: tabular-nums; overflow: hidden"><header style="flex-shrink: 0; height: 104px; display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid #26262A">
 <div style="display:flex;flex-direction:column;gap:12px;min-width:0"><div style="font-size: 34px; font-weight: 500; letter-spacing: 0.04em" id="station-name"></div><div id="demo-controls" hidden></div></div>
+<div class="wx" id="weather" hidden><div class="wx-label"><b data-weather="title">気象警報</b><span data-weather="time"></span><span>出典 気象庁（物理部が加工）</span></div><div class="wx-items" data-weather="items"></div></div>
 <div style="display: flex; align-items: flex-end; gap: 28px"><div style="display: flex; align-items: center; gap: 14px; height: 44px; box-sizing: border-box; padding: 0 18px; margin-bottom: 4px; background: #151517; border: 1px solid #3A3A40; border-radius: 4px; font-size: 19px; line-height: 1; white-space: nowrap" id="reconnect-badge" hidden=""><span style="display: inline-block; flex-shrink: 0; width: 20px; height: 20px; box-sizing: border-box; border: 3px solid #26262A; border-top-color: #F1F1EE; border-radius: 50%; animation: spin 1s linear infinite"></span><span style="font-weight: 500">再接続中</span><span style="color: #A1A1A6" id="retry-count">2回目</span><span style="width: 1px; height: 18px; background: #3A3A40"></span><span style="color: #A1A1A6"><span style="color: #F1F1EE" id="last-trains">12:06:17</span> 時点の情報を表示中</span></div>
 <div style="font-size: 20px; font-weight: 400; color: #A1A1A6; letter-spacing: 0.08em; padding-bottom: 10px" id="clock-date">11.06 金</div>
 <div style="display: flex; align-items: baseline; gap: 4px; line-height: 0.9">
@@ -926,6 +950,17 @@ async function fetchBuses() {
 async function fetchDelays() {
     const data=await api('delays');if(data)delayData=data;renderDelays();setTimeout(fetchDelays,120000);
 }
+let weatherData=null,lastWeatherSuccess=0;
+async function fetchWeather() {
+    try {
+        const response=await fetch('api/weather',{signal:AbortSignal.timeout(10000),cache:'no-store'});
+        if(response.ok){weatherData=await response.json();lastWeatherSuccess=Date.now();}
+    } catch(error) {}
+    // 取得できない状態が続いたら、古い警報を出し続けないよう札を消す
+    if(Date.now()-lastWeatherSuccess>600000)weatherData=null;
+    if(window.renderWeather)window.renderWeather($('weather'),weatherData);
+    setTimeout(fetchWeather,60000);
+}
 document.fonts.ready.then(render);
 clockTick();
 if(config.demo) {
@@ -936,6 +971,11 @@ if(config.demo) {
 } else {
     clockSync();setInterval(clockTick,1000);setInterval(clockSync,300000);
     if(enabled('trains'))fetchTrains();if(enabled('buses'))fetchBuses();if(enabled('delays'))fetchDelays();
+    if(enabled('weather')) {
+        const script=document.createElement('script');
+        script.src=new URL('assets/weather.js',location.href).href;script.onload=fetchWeather;
+        document.body.append(script);
+    }
 }
 
 </script>

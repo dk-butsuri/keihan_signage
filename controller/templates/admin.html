@@ -142,6 +142,7 @@ textarea{width:100%;min-height:340px;margin-top:10px;font-family:ui-monospace,Me
       <div class="field"><label for="f-trains">列車</label><label class="switch"><input type="checkbox" id="f-trains" data-key="features.trains"><span></span></label></div>
       <div class="field"><label for="f-buses">バス</label><label class="switch"><input type="checkbox" id="f-buses" data-key="features.buses"><span></span></label></div>
       <div class="field"><label for="f-delays">運行情報</label><label class="switch"><input type="checkbox" id="f-delays" data-key="features.delays"><span></span></label></div>
+      <div class="field"><label for="f-weather">気象警報</label><label class="switch"><input type="checkbox" id="f-weather" data-key="features.weather"><span></span></label></div>
 
       <div class="group-title">列車</div>
       <div class="field"><label for="t-station">駅番号</label><input type="number" id="t-station" data-key="trains.station_id" min="1" max="42"><div class="hint" id="station-hint">京阪の駅番号（KH18 なら 18）</div></div>
@@ -319,6 +320,7 @@ async function refreshStatus(){
     }
     parts.push(sourceRow('バス',status.buses,`正常（${status.buses.count}件）`));
     parts.push(sourceRow('運行情報',status.delays,status.delays.affected?`正常（影響のある路線 ${status.delays.affected}）`:'正常（影響のある路線なし）'));
+    if(status.weather)parts.push(sourceRow('気象警報',status.weather,status.weather.warnings?`正常（表示中の警報 ${status.weather.warnings}種類）`:'正常（表示する警報なし）'));
   }
   $('status-list').innerHTML=parts.map(p=>p.html).join('');
   const worst=parts.some(p=>p.state==='bad')?'bad':parts.some(p=>p.state==='warn')?'warn':'ok';

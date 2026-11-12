@@ -7,6 +7,7 @@ features:
   trains: true
   buses: true
   delays: true
+  weather: true   # 気象警報（気象庁の防災情報XML）
 
 trains:
   station_id: 17        # KH駅番号（この場合、寝屋川市駅）
@@ -60,7 +61,12 @@ delays:
   # only_lines:
   #   jrw: [ＪＲ京都線, 学研都市線, 大阪環状線]
 
+weather:
+  # 警報を見る区域（気象庁の警報の区域名。都道府県名から書く）。省略時はこの7市
+  areas: [大阪府寝屋川市, 大阪府枚方市, 大阪府交野市, 大阪府守口市, 大阪府門真市, 大阪府四條畷市, 大阪府大東市]
+
 intervals:
   train_seconds: 60
   bus_seconds: 60
   delay_seconds: 600
+  weather_seconds: 60   # 気象庁の決まりで60秒より短くできない

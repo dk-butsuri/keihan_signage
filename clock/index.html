@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>時計</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;500;700&display=swap">
     <style>
         html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0B0B0C; }
         #screen {
@@ -22,6 +22,24 @@
         .separator { display: inline-block; width: .22em; text-align: center; }
         .rule { width: 1280px; height: 1px; background: #26262A; }
         #date { font-size: 52px; font-weight: 400; color: #A1A1A6; letter-spacing: 0.08em; }
+        .wx { position: absolute; left: 60px; right: 60px; top: 872px; display: flex; flex-direction: column-reverse; align-items: center; gap: 14px; white-space: nowrap; }
+        .wx[hidden] { display: none; }
+        .wx-label { display: flex; gap: 14px; align-items: baseline; line-height: 1; }
+        .wx-label b { font-size: 18px; font-weight: 500; color: #A1A1A6; letter-spacing: .06em; }
+        .wx-label span { font-size: 16px; color: #7C7C82; }
+        .wx-items { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 36px; }
+        .wx-item { display: flex; align-items: center; gap: 14px; line-height: 1; }
+        .wx-chip { display: inline-flex; align-items: baseline; padding: 9px 16px 10px; border-radius: 4px; font-size: 30px; font-weight: 700; color: #fff; letter-spacing: .02em; }
+        .wx-chip .wx-lv { font-size: 18px; font-weight: 500; margin-right: 8px; opacity: .9; }
+        .wx-chip.l3 { background: #E8290B; }
+        .wx-chip.l4 { background: #A3129E; }
+        .wx-chip.l5 { background: #0C000C; box-shadow: inset 0 0 0 2px #fff; }
+        .wx-chip.pre { background: transparent; font-weight: 500; }
+        .wx-chip.pre .wx-lv { opacity: 1; font-weight: 700; }
+        .wx-chip.soon { color: #F2D600; box-shadow: inset 0 0 0 2px #F2D600; }
+        .wx-chip.possibility { color: #F1F1EE; box-shadow: inset 0 0 0 2px #7C7C82; }
+        .wx-cities { font-size: 26px; font-weight: 500; color: #F1F1EE; }
+        .wx-cities i { font-style: normal; color: #7C7C82; margin: 0 1px; }
     </style>
 </head>
 <body>
@@ -29,6 +47,7 @@
         <div class="time-row"><span id="time"></span><span id="seconds"></span></div>
         <div class="rule"></div>
         <div id="date"></div>
+        <div class="wx" id="weather" hidden><div class="wx-label"><b data-weather="title">気象警報</b><span data-weather="time"></span><span>出典 気象庁（物理部が加工）</span></div><div class="wx-items" data-weather="items"></div></div>
     </div>
     <script>
         var offset = 0; // ms: Date.now() + offset = 推定NTP時刻
@@ -104,6 +123,24 @@
                 console.log('[clock] synced offset=' + offset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/8)');
             });
         }
+
+        // 画面の切り替えは controller 経由なので、交通情報（transit）の API も同じ入口から読める
+        var weatherData = null, lastWeatherSuccess = 0;
+        function fetchWeather() {
+            fetch('/transit/api/weather', {cache: 'no-store'})
+                .then(function(res) { return res.ok ? res.json() : null; })
+                .then(function(data) { if (data) { weatherData = data; lastWeatherSuccess = Date.now(); } })
+                .catch(function() {})
+                .then(function() {
+                    if (Date.now() - lastWeatherSuccess > 600000) weatherData = null;
+                    window.renderWeather(document.getElementById('weather'), weatherData);
+                    setTimeout(fetchWeather, 60000);
+                });
+        }
+        var weatherScript = document.createElement('script');
+        weatherScript.src = '/transit/assets/weather.js';
+        weatherScript.onload = fetchWeather;
+        document.body.appendChild(weatherScript);
 
         addEventListener('resize', fit);
         fit();
