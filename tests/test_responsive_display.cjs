@@ -22,15 +22,12 @@ function inspectFrames(frames) {
             if(row.getClientRects().length&&row.getBoundingClientRect().bottom>bound-8*scale)problems.push('row overlaps footer: '+row.textContent);
         }
         for(const card of document.querySelectorAll('#'+visible+'-bus-list .bus-card')) {
-            const r=card.getBoundingClientRect(),endpoints=card.querySelectorAll('.bus-endpoint');
-            for(const el of card.querySelectorAll('.bus-endpoint > *')) {
+            const r=card.getBoundingClientRect();
+            for(const el of card.querySelectorAll('.bus-depart,.bus-status,.bus-destination,.bus-arrive')) {
                 const e=el.getBoundingClientRect();
-                if(el.scrollWidth>el.clientWidth+1||e.top<r.top-.1||e.bottom>r.bottom+.1)problems.push('bus text clipped: '+el.textContent);
+                if(el.scrollWidth>el.clientWidth+1||e.top<r.top-.1||e.bottom>r.bottom+.1||e.right>r.right+.1)problems.push('bus text clipped: '+el.textContent);
             }
-            for(let index=0;index<3;index++) {
-                const a=endpoints[0].children[index].getBoundingClientRect(),b=endpoints[1].children[index].getBoundingClientRect();
-                if(Math.abs(a.top-b.top)>.1||Math.abs(a.height-b.height)>.1)problems.push('bus arrival columns misaligned');
-            }
+            if(card.querySelector('.bus-depart').getBoundingClientRect().right>card.querySelector('.bus-status').getBoundingClientRect().left+.1)problems.push('bus status overlaps departure');
         }
         if(visible==='normal') {
             const rows=[...document.querySelectorAll('#normal-up-list > div:not(.empty),#normal-down-list > div:not(.empty)')];

@@ -2,19 +2,17 @@ const {chromium}=require('playwright');const fs=require('fs');const assert=requi
 const root=path.resolve(__dirname,'..'),out=process.env.SIGNAGE_SCREENSHOTS || fs.mkdtempSync(path.join(os.tmpdir(),'signage-display-'));
 async function assertBusRemainingTime(page, mode) {
     const rows = await page.locator('#'+mode+'-bus-list > div').evaluateAll(rows=>rows.slice(0,2).map(row=>{
-        const main=row.querySelector('.bus-status-main');
-        const destination=row.querySelector('[data-field="destination"]');
-        const origin=row.querySelector('[data-field="origin"]'),arrival=row.querySelector('[data-field="arrival"]'),terminal=row.querySelector('[data-field="terminal-time"]');
-        return {main:main.textContent,status:row.querySelector('.bus-status').textContent,
-            fits:row.querySelector('.bus-status').getBoundingClientRect().bottom<=row.getBoundingClientRect().bottom,
-            origin:origin.textContent,terminal:terminal.textContent,note:row.querySelector('[data-field="terminal-note"]').textContent,
-            aligned:Math.abs(arrival.getBoundingClientRect().top-terminal.getBoundingClientRect().top)<.1,
-            sameSize:getComputedStyle(origin).fontSize===getComputedStyle(destination).fontSize&&getComputedStyle(arrival).fontSize===getComputedStyle(terminal).fontSize,
-            bold:getComputedStyle(destination).fontWeight==='700'};
+        const field=name=>row.querySelector(`[data-field="${name}"]`);
+        const card=row.getBoundingClientRect(),status=field('status').getBoundingClientRect(),depart=field('arrival').getBoundingClientRect(),destination=field('destination').getBoundingClientRect();
+        return {status:field('status').textContent,arrival:field('arrival').textContent,terminal:field('terminal-time').textContent,
+            fits:status.bottom<=card.bottom&&status.right<=card.right,
+            stacked:destination.top>=depart.bottom-.1,
+            noStopName:!row.textContent.includes('同志社香里'),
+            bold:getComputedStyle(field('destination')).fontWeight==='700'};
     }));
-    assert.deepEqual(rows.map(row=>row.main),['約4分後','約11分後']);
-    assert.ok(rows.every(row=>row.status===row.main&&row.fits&&row.aligned&&row.sameSize&&row.bold&&row.origin==='同志社香里'&&row.note==='定刻'),JSON.stringify(rows));
-    assert.deepEqual(rows.map(row=>row.terminal),['12:32','12:33']);
+    assert.deepEqual(rows.map(row=>row.status),['約4分後','約11分後']);
+    assert.ok(rows.every(row=>row.fits&&row.stacked&&row.noStopName&&row.bold&&row.arrival.endsWith('発')),JSON.stringify(rows));
+    assert.deepEqual(rows.map(row=>row.terminal),['12:32着','12:33着']);
 }
 async function assertBusFallbacks(page) {
     await page.evaluate(()=>{
@@ -28,13 +26,12 @@ async function assertBusFallbacks(page) {
         renderBuses();window.savedBusData=original;
     });
     const cards=page.locator('#normal-bus-list .bus-card');
-    assert.equal(await cards.nth(0).locator('[data-field="terminal-time"]').textContent(),'—');
-    assert.equal(await cards.nth(0).locator('[data-field="terminal-note"]').textContent(),'時刻不明');
+    assert.equal(await cards.nth(0).locator('[data-field="terminal-time"]').textContent(),'');
     assert.equal(await cards.nth(1).locator('[data-field="status"]').textContent(),'定刻');
     assert.equal(await cards.nth(2).locator('[data-field="arrival"]').textContent(),'—');
-    assert.equal(await cards.nth(2).locator('[data-field="terminal-time"]').textContent(),'—');
+    assert.equal(await cards.nth(2).locator('[data-field="terminal-time"]').textContent(),'');
     assert.equal(await cards.nth(2).locator('[data-field="status"]').textContent(),'運休');
-    assert.equal(await cards.nth(3).locator('[data-field="terminal-note"]').textContent(),'定刻（推定）');
+    assert.match(await cards.nth(3).locator('[data-field="terminal-time"]').textContent(),/着（推定）$/);
     await page.evaluate(()=>{busData=window.savedBusData;delete window.savedBusData;renderBuses();});
 }
 async function assertStableClock(page) {
