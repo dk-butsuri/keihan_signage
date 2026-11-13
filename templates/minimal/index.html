@@ -126,7 +126,8 @@ if(openingAllowed) {
 .operation-line-name { color:#D9D9D6; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .operation-line-status { color:#A1A1A6; font-size:15px; flex-shrink:0; }
 .operation-page-number { color:#7C7C82; font-size:14px; text-align:right; padding-top:10px; }
-#suspended-delay-list .operation-group { padding:10px 16px; }
+#suspended-delay-list { display:flex; flex-direction:column; }
+#suspended-delay-list .operation-group { flex:0 1 52px; min-height:34px; margin-top:6px; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; padding:0 16px; }
 #suspended-delay-list .operation-group-head { font-size:20px; gap:10px; }
 #suspended-delay-list .operation-group-status { display:none; }
 .operation-compact-lines { position:relative; min-height:24px; margin-left:auto; min-width:0; flex:1; text-align:right; font-size:15px; }
@@ -163,6 +164,10 @@ span.operation-compact-lines { color:#7C7C82; }
 #normal-delay-list.compact-operations .operation-lines-page { gap:6px; }
 #normal-delay-list.compact-operations .operation-line { font-size:16px; line-height:24px; }
 #normal-delay-list.compact-operations .operation-page-number { font-size:12px; padding-top:2px; line-height:18px; }
+#normal-delay-list.crowded-operations .operation-lines { margin-top:6px; min-height:24px !important; }
+#normal-delay-list.crowded-operations .operation-lines-page { flex-direction:row; align-items:center; gap:12px; }
+#normal-delay-list.crowded-operations .operation-line { flex:1; min-width:0; }
+#normal-delay-list.crowded-operations .operation-page-number { padding:0; }
 #screen.has-operations.operations-crowded { padding-top:12px !important; padding-bottom:12px !important; }
 #screen.has-operations.operations-crowded > header { height:76px !important; padding-bottom:16px !important; }
 #screen.operations-crowded #suspended { padding-top:12px !important; }
@@ -595,7 +600,7 @@ class OperationPager {
     }
 }
 function operationGroups() {
-    return delayData?.groups || ['京阪','大阪メトロ','JR','私鉄'].map(name=>({name,mark:'−',status:'情報なし',lines:[]}));
+    return delayData?.groups || ['京阪','大阪メトロ','JR','大阪モノレール','近鉄','その他の私鉄'].map(name=>({name,mark:'−',status:'情報なし',lines:[]}));
 }
 function updateOperationAges() {
     for(const el of $('operation-slides').querySelectorAll('[data-announced]')) {
@@ -620,7 +625,9 @@ function renderDelays() {
         operationPagers.splice(0).forEach(pager=>pager.destroy());
         for(const mode of ['normal','suspended']) {
             const list=$(mode+'-delay-list');list.replaceChildren();
-            list.classList.toggle('compact-operations',mode==='normal' && groups.filter(group=>group.lines?.length).length>=3);
+            const affected=groups.filter(group=>group.lines?.length).length;
+            list.classList.toggle('compact-operations',mode==='normal' && affected>=2);
+            list.classList.toggle('crowded-operations',mode==='normal' && affected>=4);
             if(!enabled('delays'))continue;
             for(const group of groups) {
                 const card=document.createElement('div');card.className='operation-group';
@@ -636,7 +643,7 @@ function renderDelays() {
                 }
                 const holder=document.createElement('div');holder.className=mode==='normal'?'operation-lines':'operation-compact-lines';
                 (mode==='normal'?card:head).append(holder);
-                const size=mode==='normal'?3:1, pages=[];
+                const size=mode==='normal'?(affected>=4?1:3):1, pages=[];
                 for(let start=0;start<lines.length;start+=size) {
                     const page=document.createElement('div');page.className='operation-lines-page';
                     for(const line of lines.slice(start,start+size)) {

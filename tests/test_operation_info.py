@@ -114,14 +114,14 @@ def test_groups_severity_order_names_and_details():
         _line("osaka_metro", "御堂筋線", LineStatus.ALERT),
     ])
     groups = operation_info.groups(tracker, {})
-    assert [g["name"] for g in groups] == ["京阪", "大阪メトロ", "JR", "私鉄"]
+    assert [g["name"] for g in groups] == ["京阪", "大阪メトロ", "JR", "大阪モノレール", "近鉄", "その他の私鉄"]
     assert [(g["mark"], g["status"]) for g in groups] == [
-        ("○", "平常運転"), ("○", "平常運転"), ("×", "運転見合わせ"), ("△", "列車遅延"),
+        ("○", "平常運転"), ("○", "平常運転"), ("×", "運転見合わせ"), ("−", "情報なし"), ("−", "情報なし"), ("△", "列車遅延"),
     ]
     assert [line["name"] for line in groups[2]["lines"]] == ["JR京都線", "大阪環状線", "奈良線", "学研都市線"]
     assert groups[2]["lines"][0]["detail"] == "線路確認中"
     assert groups[2]["lines"][0]["announced_time"] == NOW
-    assert groups[3]["lines"][0]["name"] == "阪急京都線"
+    assert groups[5]["lines"][0]["name"] == "阪急京都線"
     assert not groups[0]["lines"] and not groups[1]["lines"]
 
 

@@ -131,7 +131,7 @@ def test_static_scenarios_have_consistent_display_data_and_no_timeline(scenario_
     assert main.LineResponse(**data['line'])
     assert main.BusResponse(**data['buses'])
     assert main.DelayResponse(**data['delays'])
-    assert len(data['delays']['groups']) == 4
+    assert len(data['delays']['groups']) == 6
     for direction in ('up', 'down'):
         incoming = sorted((train for train in data['line']['trains'] if train['direction'] == direction
             and (train['position'] < 18 if direction == 'up' else train['position'] > 18)),
@@ -147,7 +147,7 @@ def test_static_scenarios_have_consistent_display_data_and_no_timeline(scenario_
         assert all(g['mark'] == '○' for i,g in enumerate(data['delays']['groups']) if i != 2)
     else:
         assert data['line']['suspended']
-        assert all(g['mark'] in ('△','×') and len(g['lines']) >= 5 for g in data['delays']['groups'])
+        assert all(g['mark'] in ('△','×') and len(g['lines']) >= (2 if g['name'] == '大阪モノレール' else 5) for g in data['delays']['groups'])
         affected = [line for g in data['delays']['groups'] for line in g['lines']]
         assert len(affected) >= 30
         if scenario_id == 'all-stopped':

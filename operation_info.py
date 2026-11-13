@@ -45,7 +45,9 @@ DEFAULT_GROUPS = (
     {"name": "京阪", "providers": ["keihan"], "lines": ["京阪本線", "鴨東線", "中之島線", "交野線", "宇治線"]},
     {"name": "大阪メトロ", "providers": ["osaka_metro"]},
     {"name": "JR", "providers": ["jrw"], "lines": DEFAULT_ONLY_LINES["jrw"]},
-    {"name": "私鉄", "providers": ["hankyu", "hanshin", "kintetsu", "nankai", "osaka_monorail"]},
+    {"name": "大阪モノレール", "providers": ["osaka_monorail"]},
+    {"name": "近鉄", "providers": ["kintetsu"]},
+    {"name": "その他の私鉄", "providers": ["hankyu", "hanshin", "nankai"]},
 )
 _SEVERITY = {status: index for index, status in enumerate((
     LineStatus.SUSPENDED, LineStatus.PARTIAL_SUSPENSION, LineStatus.DELAYED,

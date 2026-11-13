@@ -28,7 +28,9 @@ _REFERENCE = datetime.datetime(2026, 11, 7, 15, tzinfo=datetime.timezone(datetim
 _ANNOUNCED = (_REFERENCE - datetime.timedelta(minutes=8)).isoformat()
 _JR_LINES = ("大阪環状線", "JRゆめ咲線", "大和路線", "阪和線", "関西空港線", "JR京都線", "JR神戸線", "学研都市線", "JR東西線", "JR宝塚線", "おおさか東線", "奈良線", "琵琶湖線", "湖西線")
 _METRO_LINES = ("中央線", "南港ポートタウン線", "御堂筋線", "谷町線", "四つ橋線", "千日前線", "堺筋線", "長堀鶴見緑地線", "今里筋線")
-_PRIVATE_LINES = ("阪急京都線", "阪急神戸線", "阪急宝塚線", "阪神本線", "阪神なんば線", "近鉄奈良線", "近鉄大阪線", "近鉄京都線", "近鉄南大阪線", "南海本線", "南海高野線", "大阪モノレール線")
+_MONORAIL_LINES = ("大阪モノレール線", "国際文化公園都市線")
+_KINTETSU_LINES = ("奈良線", "大阪線", "京都線", "南大阪線", "けいはんな線")
+_PRIVATE_LINES = ("阪急京都線", "阪急神戸線", "阪急宝塚線", "阪神本線", "阪神なんば線", "南海本線", "南海高野線")
 _KEIHAN_LINES = ("京阪本線", "鴨東線", "中之島線", "交野線", "宇治線")
 
 
@@ -88,12 +90,12 @@ def _notice(name, status, detail, prefix=""):
 
 def _groups(scenario_id):
     if scenario_id == "normal":
-        return [_group(name) for name in ("京阪", "大阪メトロ", "JR", "私鉄")]
+        return [_group(name) for name in ("京阪", "大阪メトロ", "JR", "大阪モノレール", "近鉄", "その他の私鉄")]
     if scenario_id == "jr-loop":
         detail = "大阪環状線内での線路内人立ち入りのため、安全確認を行っています。環状線と乗り入れ路線で運転を見合わせています。"
         return [_group("京阪"), _group("大阪メトロ"), _group("JR", [
             _notice(name, "運転見合わせ", detail, "JR") for name in _JR_LINES[:5]
-        ]), _group("私鉄")]
+        ]), _group("大阪モノレール"), _group("近鉄"), _group("その他の私鉄")]
     stopped = scenario_id == "all-stopped"
     return [
         _group("京阪", [_notice(name, "運転見合わせ" if stopped else "部分運休" if name == "中之島線" else "列車遅延",
@@ -102,7 +104,11 @@ def _groups(scenario_id):
             "強風の影響で、地上区間を含む路線の運転を見合わせています。" if i < 2 else "荒天による直通運転の中止や混雑の影響で、列車に遅れが出ています。", "Osaka Metro ") for i, name in enumerate(_METRO_LINES)]),
         _group("JR", [_notice(name, "運転見合わせ" if i < 11 else "列車遅延",
             "強風と大雨のため、運転を見合わせています。運転再開の見込みは立っていません。" if i < 11 else "大雨による徐行運転のため、列車に大幅な遅れが出ています。", "JR") for i, name in enumerate(_JR_LINES)]),
-        _group("私鉄", [_notice(name, "運転見合わせ" if i % 3 != 2 else "列車遅延",
+        _group("大阪モノレール", [_notice(name, "運転見合わせ",
+            "強風のため運転を見合わせています。", "大阪モノレール") for name in _MONORAIL_LINES]),
+        _group("近鉄", [_notice(name, "運転見合わせ" if i % 2 == 0 else "列車遅延",
+            "強風のため運転を見合わせています。" if i % 2 == 0 else "強風による速度規制のため、列車に遅れが出ています。", "近鉄") for i, name in enumerate(_KINTETSU_LINES)]),
+        _group("その他の私鉄", [_notice(name, "運転見合わせ" if i % 3 != 2 else "列車遅延",
             "強風のため運転を見合わせています。" if i % 3 != 2 else "強風による速度規制のため、列車に遅れが出ています。") for i, name in enumerate(_PRIVATE_LINES)]),
     ]
 

@@ -4,7 +4,7 @@ const root=path.resolve(__dirname,'..');
 const out=process.env.SIGNAGE_SCREENSHOTS||fs.mkdtempSync(path.join(os.tmpdir(),'signage-opening-'));
 const source=fs.readFileSync(root+'/templates/minimal/index.html','utf8');
 const frame=JSON.parse(fs.readFileSync(root+'/demo-data/replay.json')).frames[0];
-const groups=['京阪','大阪メトロ','JR','私鉄'].map(name=>({name,mark:'○',status:'平常運転',lines:[]}));
+const groups=['京阪','大阪メトロ','JR','大阪モノレール','近鉄','その他の私鉄'].map(name=>({name,mark:'○',status:'平常運転',lines:[]}));
 (async()=>{
     const browser=await chromium.launch(),errors=[];
     async function view({width=1920,height=1080,off=false,reduced=false,suspended=false,fail=false,slow=false,broken=false,notices=false,partial=false,features={trains:true,buses:true,delays:true}}={}) {

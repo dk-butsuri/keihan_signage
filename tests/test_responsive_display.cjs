@@ -6,7 +6,7 @@ const os=require('os');
 const root=path.resolve(__dirname,'..');
 const replay=JSON.parse(fs.readFileSync(root+'/demo-data/replay.json'));
 const output=process.env.SIGNAGE_SCREENSHOTS||fs.mkdtempSync(path.join(os.tmpdir(),'signage-responsive-'));
-const groups=['京阪','大阪メトロ','JR','私鉄'].map(name=>({name,mark:'×',status:'運転見合わせ',lines:Array.from({length:5},(_,i)=>({name:name+'路線'+(i+1),ticker_name:name+'路線'+(i+1),status:'運転見合わせ',detail:'強風のため、運転を見合わせています。',announced_time:'2026-11-07T12:00:00+09:00'}))}));
+const groups=['京阪','大阪メトロ','JR','大阪モノレール','近鉄','その他の私鉄'].map(name=>({name,mark:'×',status:'運転見合わせ',lines:Array.from({length:5},(_,i)=>({name:name+'路線'+(i+1),ticker_name:name+'路線'+(i+1),status:'運転見合わせ',detail:'強風のため、運転を見合わせています。',announced_time:'2026-11-07T12:00:00+09:00'}))}));
 function inspectFrames(frames) {
     const failures=[];
     const root=$('screen'),scale=root.getBoundingClientRect().width/root.clientWidth;

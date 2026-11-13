@@ -10,7 +10,7 @@ const notices=['大阪環状線','JRゆめ咲線','大和路線','阪和線','�
     name,ticker_name:name.startsWith('JR')?name:'JR'+name,status:'運転見合わせ',
     detail:'大阪環状線での線路確認の影響で、運転を見合わせています。',announced_time:'2026-11-06T11:50:00+09:00',
 }));
-let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',status:'運転見合わせ',lines:notices},{...normal,name:'私鉄'}];
+let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',status:'運転見合わせ',lines:notices},{...normal,name:'大阪モノレール'},{...normal,name:'近鉄'},{...normal,name:'その他の私鉄'}];
 (async()=>{
     const browser=await chromium.launch();
     const page=await browser.newPage({viewport:{width:1920,height:1080}});
@@ -25,7 +25,7 @@ let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',statu
     });
     await page.goto('http://operations.test/?motion=off');
     await page.evaluate(()=>document.fonts.ready);
-    assert.equal(await page.locator('#normal-delay-list > div').count(),4);
+    assert.equal(await page.locator('#normal-delay-list > div').count(),6);
     assert.equal(await page.locator('.operation-dot').count(),3);
     assert.equal(await page.locator('#operation-viewport .operation-item').count(),2);
     assert.equal(await page.locator('#normal-delay-list .operation-line-name').count(),3);
@@ -75,7 +75,7 @@ let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',statu
     // 通常時に全4社で多数の路線が影響を受けても、末尾の会社を落とさない。
     await page.evaluate(lines=>{lineData.suspended=false;delayData.groups=delayData.groups.map(g=>({...g,mark:'×',status:'運転見合わせ',lines}));render();},notices);
     const clipped=await page.locator('#normal-delay-list').evaluate(e=>e.scrollHeight>e.clientHeight+1);
-    assert.equal(clipped,false,'all four operator groups must fit');
+    assert.equal(clipped,false,'all six operator groups must fit');
     await page.screenshot({path:out+'/operations-normal.png'});
     await page.evaluate(()=>{delayData.groups=[{name:'JR',mark:'×',status:'運転見合わせ',lines:delayData.groups[0].lines.slice(0,2)}];render();});
     assert.equal(await page.locator('#operation-pagination').isVisible(),false);

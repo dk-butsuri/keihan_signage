@@ -231,11 +231,11 @@ await page.route('http://signage.test/**',async route=>{
  if(path==='/transit/')return route.fulfill({contentType:'text/html',body:html()});
  const name=path.split('/').at(-1);
  if(failure && ['trains','line','buses'].includes(name))return route.fulfill({status:503,contentType:'application/json',body:'{"detail":"test"}'});
- const data=name==='trains'?fixture:name==='line'?line:name==='buses'?{buses:fixture.buses}:name==='delays'?{delays:fixture.delays,groups:['京阪','大阪メトロ','JR','私鉄'].map((name,i)=>({name,mark:i===0||i===2?'△':'○',status:i===0||i===2?'列車遅延':'平常運転',lines:fixture.delays.filter(d=>i===0?d.line.startsWith('京阪'):i===2?d.line.startsWith('JR'):false).map(d=>({...d,name:d.line,ticker_name:d.line}))}))}:name==='time'?{ts:Date.parse('2026-11-06T12:07:02+09:00')/1000,ntp_rtt_ms:1}:{};
+ const data=name==='trains'?fixture:name==='line'?line:name==='buses'?{buses:fixture.buses}:name==='delays'?{delays:fixture.delays,groups:['京阪','大阪メトロ','JR','大阪モノレール','近鉄','その他の私鉄'].map((name,i)=>({name,mark:i===0||i===2?'△':'○',status:i===0||i===2?'列車遅延':'平常運転',lines:fixture.delays.filter(d=>i===0?d.line.startsWith('京阪'):i===2?d.line.startsWith('JR'):false).map(d=>({...d,name:d.line,ticker_name:d.line}))}))}:name==='time'?{ts:Date.parse('2026-11-06T12:07:02+09:00')/1000,ntp_rtt_ms:1}:{};
  return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
 });
 await page.goto('http://signage.test/transit/?motion=off');await page.evaluate(()=>document.fonts.ready);await page.locator('#normal-up-list > div').first().waitFor();await page.screenshot({path:out+'/normal.png'});
-assert.equal(await page.locator('#normal-delay-list > div').count(),4);assert.equal(await page.locator('#normal-delay-list').textContent().then(t=>t.includes('Long notice')),false);
+assert.equal(await page.locator('#normal-delay-list > div').count(),6);assert.equal(await page.locator('#normal-delay-list').textContent().then(t=>t.includes('Long notice')),false);
 assert.equal(await page.locator('#normal-up-list > div').count(),3);assert.equal(await page.locator('#normal-bus-list > div').count(),6);
 assert.deepEqual(await page.locator('#normal-bus-list [data-field=destination]').allTextContents(),['香里園','寝屋川市駅','香里園','寝屋川市駅','香里園','寝屋川市駅']);
 await assertBusRemainingTime(page,'normal');
@@ -261,7 +261,7 @@ assert.equal(await page.locator('#suspended-up [data-field="state"]').textConten
 assert.ok(await page.locator('#suspended-up [data-field="state"]').evaluate(e=>e.scrollWidth<=e.clientWidth+1));
 line.directions.up={state:'none',next:[]};await page.evaluate(()=>fetchTrains());assert.equal(await page.locator('#suspended-up .next-list [data-field="kind"]').count(),0);
 line.suspended=false;await page.evaluate(()=>fetchTrains());failure=true;await page.evaluate(()=>fetchTrains());await page.locator('#reconnect-badge').waitFor({state:'visible'});await page.screenshot({path:out+'/reconnecting-brief.png'});
-assert.equal(await page.locator('#normal-delay-list > div').count(),4);assert.equal(await page.locator('#normal-delay-list').textContent().then(t=>t.includes('Long notice')),false);
+assert.equal(await page.locator('#normal-delay-list > div').count(),6);assert.equal(await page.locator('#normal-delay-list').textContent().then(t=>t.includes('Long notice')),false);
 assert.equal(await page.locator('#normal-up-list > div').count(),3);
 failure=false;await page.evaluate(()=>fetchTrains());assert.equal(await page.locator('#reconnect-badge').isVisible(),false);
 await page.setViewportSize({width:960,height:540});await page.waitForFunction(()=>getComputedStyle(document.getElementById('screen')).transform==='matrix(0.5, 0, 0, 0.5, 0, 0)');assert.equal(await page.locator('#screen').evaluate(e=>getComputedStyle(e).transform),'matrix(0.5, 0, 0, 0.5, 0, 0)');

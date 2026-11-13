@@ -46,7 +46,7 @@ delays:
   # providers: all で、ライブラリの既定の全取得元（全国＋台湾・シンガポール・欧州の一部。yahoo・mta_subway・odakyu・db を除く）
   # Yahoo! 路線情報（近畿）も使えますが、Yahoo! は運行情報の二次利用を禁じています: providers: [yahoo]
   # 取得先ごとに表示する路線を絞る（路線名で指定）。省略時は JR西日本を京阪神の路線に絞る。{} で絞らない
-  # minimal の表示順。省略時も京阪・大阪メトロ・JR・私鉄の4組（JRは京阪神の路線）
+  # minimal の表示順。省略時も京阪・大阪メトロ・JR・大阪モノレール・近鉄・その他の私鉄の6組（JRは京阪神の路線）
   # groups:
   #   - name: 京阪
   #     providers: [keihan]
@@ -56,8 +56,12 @@ delays:
   #   - name: JR
   #     providers: [jrw]
   #     lines: [ＪＲ京都線, 学研都市線, 大阪環状線]
-  #   - name: 私鉄
-  #     providers: [hankyu, hanshin, kintetsu, nankai, osaka_monorail]
+  #   - name: 大阪モノレール
+  #     providers: [osaka_monorail]
+  #   - name: 近鉄
+  #     providers: [kintetsu]
+  #   - name: その他の私鉄
+  #     providers: [hankyu, hanshin, nankai]
   # only_lines:
   #   jrw: [ＪＲ京都線, 学研都市線, 大阪環状線]
 
