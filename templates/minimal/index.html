@@ -91,7 +91,7 @@ if(openingAllowed) {
 .departure-revised.departure-compact .departure-time { font-size:34px; line-height:36px; }
 .departure-revised.departure-compact .departure-time.is-pending { font-size:27px; }
 .departure-revised.departure-compact .departure-destination, .departure-revised.departure-compact .departure-status { grid-row:1; }
-.bus-card { box-sizing:border-box; height:116px; min-height:100px; display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:44px 30px; column-gap:8px; row-gap:6px; align-content:center; padding:6px 18px 6px 20px; background:#151517; border-radius:4px; }
+.bus-card { box-sizing:border-box; height:116px; min-height:100px; display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:44px 30px; column-gap:8px; row-gap:12px; align-content:center; padding:6px 18px 6px 20px; background:#151517; border-radius:4px; }
 .bus-depart { font-size:44px; line-height:44px; font-weight:400; color:#F1F1EE; white-space:nowrap; }
 .bus-unit { margin-left:4px; font-size:16px; color:#A1A1A6; }
 .bus-status { justify-self:end; display:flex; align-items:baseline; gap:2px; line-height:1; white-space:nowrap; }
@@ -100,7 +100,7 @@ if(openingAllowed) {
 .bus-status-word { font-size:22px; font-weight:700; }
 .bus-status-plain { font-size:18px; color:#A1A1A6; }
 .bus-route { grid-column:1 / -1; min-width:0; display:flex; align-items:baseline; gap:10px; }
-.bus-arrow { flex:none; align-self:center; transform:translateY(1.6px); color:#A1A1A6; }
+.bus-arrow { flex:none; align-self:center; transform:translateY(2px); color:#A1A1A6; }
 .bus-destination { min-width:0; font-size:26px; line-height:30px; font-weight:700; color:#F1F1EE; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bus-arrive { flex:none; font-size:22px; line-height:30px; color:#D9D9D6; white-space:nowrap; }
 .bus-card.is-cancelled .bus-depart, .bus-card.is-cancelled .bus-destination { color:#7C7C82; }
@@ -450,7 +450,7 @@ function trainEstimatedTime(train) {
 }
 function renderTrains(direction, trains, error) {
     const list = $('normal-' + direction + '-list'); list.replaceChildren();
-    const visible=(trains || []).filter(train=>!train.is_this_station && (train.estimate_unreliable || !Number.isFinite(train.minutes_remaining) || train.minutes_remaining>=15)).slice(0,6);
+    const visible=(trains || []).filter(train=>!train.is_this_station && (train.estimate_unreliable || !Number.isFinite(train.minutes_remaining) || train.minutes_remaining>=(config.trains?.min_minutes_until ?? 15))).slice(0,6);
     if (!visible.length) { list.style.removeProperty('grid-template-rows'); empty(list, error || '表示可能な情報がありません'); return; }
     const compact=visible.map((train,index)=>index>=4);
     list.style.gridTemplateRows=compact.map(value=>value?'72px':'var(--departure-row-height)').join(' ');

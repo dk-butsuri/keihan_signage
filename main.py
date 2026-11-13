@@ -729,7 +729,8 @@ async def read_root(request: Request):
         station_name = ""
     return templates.TemplateResponse(request, "index.html", {
         "station_name": station_name,
-        "config": {"features": _cfg["features"], "buses": {"stop_name": _cfg["buses"]["stop_name"]}},
+        "config": {"features": _cfg["features"], "buses": {"stop_name": _cfg["buses"]["stop_name"]},
+                   "trains": {"min_minutes_until": _cfg["trains"]["min_minutes_until"]}},
     })
 
 @app.post("/api/config/reload")
@@ -746,7 +747,11 @@ async def get_trains():
         stale = _stale_reason(datetime.datetime.now(JST))
         if stale:
             return StationResponse(station_name=station.station_name.ja, up_trains=[], down_trains=[], error=stale)
-        up, down = _ordered_trains(station, _cfg["trains"]["min_minutes_until"], _cfg["trains"]["max_trains_per_direction"])
+        max_per_dir = _cfg["trains"]["max_trains_per_direction"]
+        up, down = _ordered_trains(station, _cfg["trains"]["min_minutes_until"], 10_000)
+        # 画面は当駅停車中の列車を出さないので、本数を切る前に除く（後で除くと表示が減る）
+        up = [t for t in up if not t.is_this_station][:max_per_dir]
+        down = [t for t in down if not t.is_this_station][:max_per_dir]
         return StationResponse(station_name=station.station_name.ja, up_trains=up, down_trains=down)
     except Exception as e:
         print(f"Error in /api/trains: {e}")
