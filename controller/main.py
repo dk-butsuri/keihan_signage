@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncGenerator, Optional
@@ -11,7 +12,6 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from time_sync import get_ntp_time
 
 TRANSIT_URL = os.getenv("TRANSIT_URL", "http://transit:8000")
 CLOCK_URL = os.getenv("CLOCK_URL", "http://clock:80")
@@ -190,11 +190,10 @@ async def get_displays():
             "connected_since": sorted(t.isoformat() for t in display_clients.values())}
 
 
+# ホストが NTP で同期しているので、自前で NTP に問い合わせない（待つ間の分だけ表示が進んでいた）
 @app.get("/api/time")
 async def get_time():
-    from fastapi.responses import JSONResponse
-    data = await asyncio.to_thread(get_ntp_time)
-    return JSONResponse(content=data, headers={"Cache-Control": "no-store"})
+    return JSONResponse(content={"ts": time.time()}, headers={"Cache-Control": "no-store"})
 
 
 

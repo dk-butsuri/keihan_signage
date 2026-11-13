@@ -6,4 +6,3 @@ jinja2
 uvicorn
 python-dotenv
 pyyaml
-ntplib

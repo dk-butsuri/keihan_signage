@@ -284,7 +284,7 @@ docker compose up -d --no-deps transit controller
 | `GET /api/mode/stream` | モード変更を SSE でストリーミング |
 | `GET /api/schedule` | スケジュール取得 |
 | `PUT /api/schedule` | スケジュール更新（要 Bearer トークン） |
-| `GET /api/time` | NTP 時刻取得 |
+| `GET /api/time` | サーバーの時刻（ホストは NTP で同期済み） |
 | `POST /api/auth` | 管理用パスワードの確認（正しければ 204） |
 | `GET /api/displays` | 表示端末の接続数（`/api/mode/stream` に `client=admin` を付けずにつないでいるもの） |
 | `GET /api/config`・`PUT /api/config` | config.yml をそのまま読み書き（書き込みは要 Bearer トークン） |

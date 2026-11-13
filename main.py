@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 import datetime
 import asyncio
+import time
 import re
 import yaml
-from time_sync import get_ntp_time
 from keihan_tracker import KHTracker
 from keihan_tracker.keihan_train.schemes import TrainType
 from keihan_tracker.keihan_train.tracker import ActiveTrainData
@@ -885,11 +885,11 @@ async def get_status():
         },
     }
 
+# ホストが NTP で同期しているので、自前で NTP に問い合わせない（待つ間の分だけ表示が進んでいた）
 @app.get("/api/time")
 async def get_time():
     from fastapi.responses import JSONResponse
-    data = await asyncio.to_thread(get_ntp_time)
-    return JSONResponse(content=data, headers={"Cache-Control": "no-store"})
+    return JSONResponse(content={"ts": time.time()}, headers={"Cache-Control": "no-store"})
 
 if __name__ == "__main__":
     import uvicorn

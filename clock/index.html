@@ -70,8 +70,8 @@
             });
         }
 
-        function tick() {
-            var date = new Date(Date.now() + offset);
+        function tick(timestamp) {
+            var date = new Date(timestamp);
             var time = new Intl.DateTimeFormat('ja-JP', {timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'}).format(date);
             var parts = new Intl.DateTimeFormat('ja-JP', {timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short'}).formatToParts(date);
             var part = function(type) { return parts.find(function(p) { return p.type === type; }).value; };
@@ -80,48 +80,52 @@
             document.getElementById('date').textContent = part('year') + '.' + part('month') + '.' + part('day') + ' ' + part('weekday');
         }
 
+        // タイマーは境目の少し前に発火することがある。そこで前の秒を出して次を1秒後に予約すると、1秒遅れのまま抜けなくなる
+        var timer = null;
         function schedule() {
-            var corrected = Date.now() + offset;
-            var delay = 1000 - (corrected % 1000);
-            setTimeout(function() { tick(); schedule(); }, delay);
+            var now = Date.now() + offset;
+            var second = Math.floor((now + 15) / 1000) * 1000;
+            tick(second);
+            timer = setTimeout(schedule, second + 1000 - now);
         }
 
         function sampleOnce() {
             var t0 = performance.now();
-            return fetch('/api/time', {cache: 'no-store'})
+            return fetch('/api/time', {cache: 'no-store', signal: AbortSignal.timeout(10000)})
                 .then(function(res) {
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     return res.json();
                 })
                 .then(function(data) {
-                    var t1 = performance.now();
-                    var httpRtt = t1 - t0;
+                    var httpRtt = performance.now() - t0;
+                    // 全部そろってから Date.now() と比べると、待った分だけずれを小さく見積もる
                     return {
-                        estimated: data.ts * 1000 + httpRtt / 2,
-                        errorBound: (httpRtt + data.ntp_rtt_ms) / 2
+                        offset: data.ts * 1000 + httpRtt / 2 - Date.now(),
+                        rtt: httpRtt
                     };
                 });
         }
 
+        // 同時に投げると互いの往復を遅らせるので、1回ずつ順に測る
         function syncTime() {
-            var promises = [];
-            for (var i = 0; i < 8; i++) promises.push(sampleOnce());
-            Promise.allSettled(promises).then(function(results) {
-                var samples = results
-                    .filter(function(r) { return r.status === 'fulfilled'; })
-                    .map(function(r) { return r.value; });
-                if (samples.length === 0) {
-                    console.warn('[clock] sync failed: all samples errored, falling back to local clock');
-                    offset = 0;
+            var best = null, attempts = 0;
+            function step() {
+                if (attempts++ >= 8) return finish();
+                return sampleOnce()
+                    .then(function(sample) { if (!best || sample.rtt < best.rtt) best = sample; }, function() {})
+                    .then(step);
+            }
+            function finish() {
+                if (!best) {
+                    console.warn('[clock] sync failed: keeping previous offset');
                     return;
                 }
-                var best = samples.reduce(function(a, b) {
-                    return a.errorBound < b.errorBound ? a : b;
-                });
-                offset = best.estimated - Date.now();
-                if (best.errorBound > 100) console.warn('[clock] high error bound: ' + best.errorBound.toFixed(1) + 'ms');
-                console.log('[clock] synced offset=' + offset.toFixed(1) + 'ms error≤' + best.errorBound.toFixed(1) + 'ms (' + samples.length + '/8)');
-            });
+                offset = best.offset;
+                clearTimeout(timer);
+                schedule();
+                console.log('[clock] synced offset=' + offset.toFixed(1) + 'ms rtt=' + best.rtt.toFixed(1) + 'ms');
+            }
+            step();
         }
 
         // 画面の切り替えは controller 経由なので、交通情報（transit）の API も同じ入口から読める
@@ -144,10 +148,9 @@
 
         addEventListener('resize', fit);
         fit();
+        schedule();
         syncTime();
         setInterval(syncTime, 5 * 60 * 1000);
-        tick();
-        schedule();
     </script>
 </body>
 </html>

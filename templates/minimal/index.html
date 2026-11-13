@@ -868,28 +868,39 @@ function setClockDigits(element, text) {
         element.children[index].textContent = character;
     });
 }
-function clockTick() {
+function clockTick(timestamp=displayTime()) {
     if(config.demo && demoTimestamp===null) {
         $('clock-date').textContent='記録を読み込み中';
         setClockDigits($('clock-time'),'--:--');setClockDigits($('clock-seconds'),':--');
         return;
     }
-    const date=new Date(displayTime()), time=timeText(date);
+    const date=new Date(timestamp), time=timeText(date);
     const parts=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',weekday:'short'}).formatToParts(date);
     const part=type=>parts.find(p=>p.type===type).value;
     $('clock-date').textContent=`${part('month')}.${part('day')} ${part('weekday')}`;
     setClockDigits($('clock-time'), time.slice(0,5));setClockDigits($('clock-seconds'), time.slice(5));
     updateOperationAges();
 }
+// タイマーは境目の少し前に発火することがある。そこで前の秒を出して次を1秒後に予約すると、1秒遅れのまま抜けなくなる
+let clockTimer=null;
+function clockLoop() {
+    const now=Date.now()+clockOffset, second=Math.floor((now+15)/1000)*1000;
+    clockTick(second);
+    clockTimer=setTimeout(clockLoop,second+1000-now);
+}
+// 同時に投げると互いの往復を遅らせるので、1回ずつ順に測る
 async function clockSync() {
-    const samples=await Promise.allSettled(Array.from({length:8},async()=>{
-        const start=performance.now();const response=await fetch('api/time',{signal:AbortSignal.timeout(10000),cache:'no-store'});
-        if(!response.ok)throw new Error(response.status);
-        const data=await response.json(),rtt=performance.now()-start;
-        return {offset:data.ts*1000+rtt/2-Date.now(),error:(rtt+data.ntp_rtt_ms)/2};
-    }));
-    const best=samples.filter(s=>s.status==='fulfilled').map(s=>s.value).sort((a,b)=>a.error-b.error)[0];
-    if(best)clockOffset=best.offset;clockTick();
+    let best=null;
+    for(let i=0;i<8;i++) {
+        try {
+            const start=performance.now();const response=await fetch('api/time',{signal:AbortSignal.timeout(10000),cache:'no-store'});
+            if(!response.ok)throw new Error(response.status);
+            const data=await response.json(),rtt=performance.now()-start;
+            if(!best||rtt<best.rtt)best={offset:data.ts*1000+rtt/2-Date.now(),rtt};
+        } catch(e) {}
+    }
+    if(!best)return;
+    clockOffset=best.offset;clearTimeout(clockTimer);clockLoop();
 }
 let failures=0,lastTrainSuccess=null;
 const failedEndpoints=new Set();
@@ -948,7 +959,7 @@ if(config.demo) {
     script.onerror=()=>{ $('demo-controls').hidden=false; $('demo-controls').textContent='デモを読み込めませんでした。再読み込みしてください。'; };
     document.body.append(script);
 } else {
-    clockSync();setInterval(clockTick,1000);setInterval(clockSync,300000);
+    clockLoop();clockSync();setInterval(clockSync,300000);
     if(enabled('trains'))fetchTrains();if(enabled('buses'))fetchBuses();if(enabled('delays'))fetchDelays();
     if(enabled('weather')) {
         const script=document.createElement('script');
