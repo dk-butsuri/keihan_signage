@@ -5,7 +5,6 @@ import time
 from dataclasses import dataclass
 
 import httpx
-from keihan_tracker.bus.tracker import fetch_diagram
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,25 +43,25 @@ def _terminal_time(diagram, stop_name, destination):
     return TerminalArrival(f"{minutes // 60:02d}:{minutes % 60:02d}", terminal.arrival_is_estimated)
 
 
-async def terminal_times(stop_name, platform_buses, now: datetime.datetime):
+async def terminal_times(client, stop_name, platform_arrivals, now: datetime.datetime):
     current = time.monotonic()
     for key, (expires, _) in list(_cache.items()):
         if expires <= current or key[0] != now.date():
             del _cache[key]
     semaphore = asyncio.Semaphore(3)
 
-    async def lookup(platform, bus):
-        dgmpl = bus.dgmpl
+    async def lookup(platform, arrival):
+        dgmpl = arrival.dgmpl
         if not dgmpl:
             return None
-        destination = bus.busstateprms.destination
+        destination = arrival.destination
         key = (now.date(), stop_name, platform, dgmpl, destination)
         if key in _cache:
             return _cache[key][1]
         result = None
         try:
             async with semaphore:
-                diagram = await asyncio.wait_for(fetch_diagram(dgmpl), timeout=6)
+                diagram = await asyncio.wait_for(client.fetch_diagram(dgmpl), timeout=6)
                 result = _terminal_time(diagram, stop_name, destination)
         except (httpx.HTTPError, ValueError, TimeoutError) as exc:
             print(f"Bus terminal timetable unavailable: {type(exc).__name__}")
@@ -71,4 +70,4 @@ async def terminal_times(stop_name, platform_buses, now: datetime.datetime):
         _cache[key] = (time.monotonic() + (86400 if result else 300), result)
         return result
 
-    return await asyncio.gather(*(lookup(platform, bus) for platform, bus in platform_buses))
+    return await asyncio.gather(*(lookup(platform, arrival) for platform, arrival in platform_arrivals))

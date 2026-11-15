@@ -28,7 +28,8 @@ let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',statu
     assert.equal(await page.locator('#normal-delay-list > div').count(),6);
     assert.equal(await page.locator('.operation-dot').count(),3);
     assert.equal(await page.locator('#operation-viewport .operation-item').count(),2);
-    assert.equal(await page.locator('#normal-delay-list .operation-line-name').count(),3);
+    assert.equal(await page.locator('#normal-delay-list .operation-line-name').count(),5);
+    assert.equal(await page.locator('#normal-delay-list .operation-page-number').count(),0,'show all lines when the whole column has room');
     assert.equal(await page.locator('#operation-viewport .operation-page').getAttribute('data-page'),'0');
     await page.clock.runFor(3000);
     const progress=await page.evaluate(()=>{
@@ -39,7 +40,7 @@ let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',statu
     assert.match(progress.transform,/matrix\(0.5,/);
     await page.evaluate(()=>{delayData=structuredClone(delayData);for(const group of delayData.groups)for(const line of group.lines)line.announced_time='2026-11-06T11:51:00+09:00';render();});
     await page.clock.runFor(1000);
-    assert.equal(await page.locator('#normal-delay-list .operation-page-number').last().textContent(),'2/2');
+    assert.equal(await page.locator('#normal-delay-list .operation-line-name').count(),5);
     await page.clock.runFor(2000);
     assert.equal(await page.locator('#operation-viewport .operation-page').last().getAttribute('data-page'),'1');
     assert.equal(await page.locator('.operation-dot.is-current').evaluate(e=>[...e.parentElement.children].indexOf(e)),1);
@@ -55,9 +56,29 @@ let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',statu
     await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
     await page.clock.runFor(6000);
     assert.equal(await page.locator('#operation-viewport .operation-page').last().getAttribute('data-page'),'1');
-    const fades=await page.evaluate(()=>operationPagers.filter(p=>!p.slide&&p.timer).flatMap(p=>p.animations.map(a=>({duration:a.effect.getTiming().duration,opacity:a.effect.getKeyframes().map(f=>f.opacity)}))));
-    assert.ok(fades.some(f=>f.duration===300&&f.opacity[0]==='0'&&f.opacity[1]==='1'),JSON.stringify(fades));
     await page.evaluate(()=>operationPagers.forEach(p=>p.animations.forEach(a=>a.finish())));
+    // 添付例のように1路線・2路線なら、各カードもその内容の高さだけ使う。
+    await page.evaluate(lines=>{
+        delayData.groups=delayData.groups.map((g,i)=>({...g,lines:i===2?lines.slice(0,1):i===5?lines.slice(1,3):[]}));render();
+    },notices);
+    const sparse=await page.locator('#normal-delay-list .operation-lines').evaluateAll(holders=>holders.map(h=>({height:h.clientHeight,content:h.firstElementChild.clientHeight})));
+    assert.ok(sparse.every(h=>Math.abs(h.height-h.content)<=1),JSON.stringify(sparse));
+    assert.ok(sparse[1].height>sparse[0].height,'two lines need more height than one');
+    assert.equal(await page.locator('#normal-delay-list .operation-page-number').count(),0);
+    await page.screenshot({path:out+'/operations-content-height.png'});
+    // 会社数だけでは圧縮しない。6社とも1路線ならすべてを同時に表示する。
+    await page.evaluate(lines=>{delayData.groups=delayData.groups.map(g=>({...g,lines:lines.slice(0,1)}));render();},notices);
+    assert.equal(await page.locator('#normal-delay-list .operation-line-name').count(),6);
+    assert.equal(await page.locator('#normal-delay-list .operation-page-number').count(),0);
+    await page.evaluate(groups=>{delayData.groups=groups;render();},groups);
+    const originalDetail='　ＪＲ線は１２：３０~１３：００頃、ﾎｰﾑのｶﾞﾗｽ確認（約１０分）(上下線)\r\n\t のため遅延。Ａ～Ｂ・Ｃ〜Ｄ\u200B\uFEFF　';
+    await page.evaluate(detail=>{
+        delayData.groups=[{name:'JR',mark:'△',status:'列車遅延',lines:[{name:'JR京都線',ticker_name:'JR京都線',status:'列車遅延',detail}]}];
+        render();
+    },originalDetail);
+    assert.equal(await page.locator('#operation-viewport .operation-detail').textContent(),'JR線は12:30～13:00頃、ホームのガラス確認（約10分）（上下線） のため遅延。A～B・C～D');
+    assert.equal(await page.evaluate(()=>delayData.groups[0].lines[0].detail),originalDetail);
+    await page.evaluate(groups=>{delayData.groups=groups;render();},groups);
     const geometry=await page.evaluate(frames=>frames.map(frame=>{
         trainData=frame.trains;lineData=frame.line;render();
         const footer=$('operation-slides').getBoundingClientRect(), main=$('suspended').hidden?$('normal'):$('suspended');
@@ -72,10 +93,28 @@ let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',statu
     await page.clock.runFor(4000);
     const compact=await page.locator('#suspended-delay-list .operation-compact-lines').evaluateAll(holders=>holders.filter(h=>h.tagName==='DIV').map(h=>({height:h.clientHeight,content:h.lastElementChild.clientHeight})));
     assert.ok(compact.every(h=>h.content<=h.height),JSON.stringify(compact));
-    // 通常時に全4社で多数の路線が影響を受けても、末尾の会社を落とさない。
+    // 通常時に全6社で多数の路線が影響を受けても、末尾の会社を落とさない。
     await page.evaluate(lines=>{lineData.suspended=false;delayData.groups=delayData.groups.map(g=>({...g,mark:'×',status:'運転見合わせ',lines}));render();},notices);
     const clipped=await page.locator('#normal-delay-list').evaluate(e=>e.scrollHeight>e.clientHeight+1);
     assert.equal(clipped,false,'all six operator groups must fit');
+    assert.equal(await page.locator('#normal-delay-list .operation-page-number').count(),6);
+    await page.clock.runFor(4000);
+    const fades=await page.evaluate(()=>operationPagers.filter(p=>!p.slide&&p.timer).flatMap(p=>p.animations.map(a=>({duration:a.effect.getTiming().duration,opacity:a.effect.getKeyframes().map(f=>f.opacity)}))));
+    assert.ok(fades.some(f=>f.duration===300&&f.opacity[0]==='0'&&f.opacity[1]==='1'),JSON.stringify(fades));
+    await page.evaluate(()=>operationPagers.forEach(p=>p.animations.forEach(a=>a.finish())));
+    assert.equal(await page.evaluate(()=>{
+        const holders=[...$('normal-delay-list').querySelectorAll('.operation-lines')],pagers=holders.map(h=>h.pager);
+        delayData=structuredClone(delayData);
+        for(const group of delayData.groups)for(const line of group.lines)line.announced_time='2026-11-06T11:52:00+09:00';
+        render();return holders.every((h,i)=>h.pager===pagers[i]);
+    }),true,'timestamp refresh must preserve sidebar pagination');
+    const capacity=await page.locator('#normal-delay-list .operation-lines').evaluateAll(holders=>holders.reduce((sum,h)=>sum+h.pageSize,0));
+    await page.setViewportSize({width:1920,height:1200});
+    await page.evaluate(()=>{scaleScreen();render();});
+    assert.ok(await page.locator('#normal-delay-list .operation-lines').evaluateAll(holders=>holders.reduce((sum,h)=>sum+h.pageSize,0))>capacity,'a taller column must show more lines without a data change');
+    await page.setViewportSize({width:1920,height:1080});
+    await page.evaluate(()=>{scaleScreen();render();});
+    assert.equal(await page.locator('#normal-delay-list').evaluate(e=>e.scrollHeight>e.clientHeight+1),false);
     await page.screenshot({path:out+'/operations-normal.png'});
     await page.evaluate(()=>{delayData.groups=[{name:'JR',mark:'×',status:'運転見合わせ',lines:delayData.groups[0].lines.slice(0,2)}];render();});
     assert.equal(await page.locator('#operation-pagination').isVisible(),false);
@@ -85,6 +124,16 @@ let groups=[normal,{...normal,name:'大阪メトロ'},{name:'JR',mark:'×',statu
     await page.evaluate(()=>{delayData.groups=[{name:'JR',mark:'−',status:'情報なし',lines:[]}];render();});
     assert.equal(await page.locator('#operation-slides').isVisible(),false);
     assert.match(await page.locator('#normal-delay-list').textContent(),/情報なし/);
+    await page.evaluate(()=>{delayData.groups=[{name:'大阪モノレール',mark:'！',status:'状況不明',lines:[]}];render();});
+    for(const mode of ['normal','suspended']) {
+        const card=page.locator(`#${mode}-delay-list .operation-group`);
+        assert.equal(await card.locator('.operation-mark').textContent(),'！');
+        assert.equal(await card.locator('.operation-group-status').textContent(),'状況不明');
+        assert.match(await card.getAttribute('class'),/is-warning/);
+        assert.doesNotMatch(await card.getAttribute('class'),/is-normal/);
+    }
+    assert.equal(await page.locator('#operation-slides').isVisible(),false);
+    await page.screenshot({path:out+'/operations-unknown.png'});
     await page.emulateMedia({reducedMotion:'reduce'});
     await page.evaluate(groups=>{delayData.groups=groups;lineData.suspended=true;render();},groups);
     await page.clock.runFor(6000);

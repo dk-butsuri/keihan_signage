@@ -12,10 +12,8 @@ import asyncio
 import time
 import re
 import yaml
-from keihan_tracker import KHTracker
-from keihan_tracker.keihan_train.schemes import TrainType
-from keihan_tracker.keihan_train.tracker import ActiveTrainData
-from keihan_tracker.keihan_train.position_calculation import calc_position
+from keihan_tracker import ActiveTrainData, BusClient, BusStatus, EtaHidden, EtaPolicy, KHTracker, TrainType, estimate_arrival
+from keihan_tracker.train.position_calculation import calc_position
 import operation_info
 import bus_timetable
 import weather
@@ -23,7 +21,6 @@ from demo import router as demo_router
 import dotenv
 dotenv.load_dotenv()
 from os import environ
-from keihan_tracker.bus.tracker import get_khbus_info
 
 from zoneinfo import ZoneInfo
 JST = ZoneInfo("Asia/Tokyo")
@@ -32,6 +29,7 @@ _cfg: dict = {}
 _tasks: dict[str, asyncio.Task] = {}
 
 tracker = KHTracker(snapshot_dir="/app/data/snapshots")
+bus_client = BusClient(snapshot_dir="/app/data/bus_snapshots")
 
 # サイネージ起動時に既にいた列車の staying_time は起動時刻から数えられ、実際より短い
 _first_position_time: Optional[datetime.datetime] = None
@@ -61,11 +59,16 @@ def _stale_reason(now: datetime.datetime) -> Optional[str]:
     return None
 
 
-def _is_barely_moving(train: ActiveTrainData) -> bool:
+def _eta_policy() -> EtaPolicy:
     cfg = _cfg.get("trains", {})
+    return EtaPolicy(growing_ratio=cfg.get("delay_growing_ratio", 0.7), stuck_minutes=cfg.get("stuck_minutes", 15))
+
+
+def _is_barely_moving(train: ActiveTrainData) -> bool:
+    policy = _eta_policy()
     return (
-        train.is_delay_growing(ratio=cfg.get("delay_growing_ratio", 0.7))
-        or (not train.is_at_start_station and train.staying_time > datetime.timedelta(minutes=cfg.get("stuck_minutes", 15)))
+        train.is_delay_growing(ratio=policy.growing_ratio)
+        or (not train.is_at_start_station and train.staying_time > datetime.timedelta(minutes=policy.stuck_minutes))
     )
 
 
@@ -73,58 +76,11 @@ def _is_unreliable(train) -> bool:
     return train.delay_minutes >= 120 or (isinstance(train, ActiveTrainData) and _is_barely_moving(train))
 
 
-_THROUGH_LINES = ("京阪本線・鴨東線", "中之島線")
-
-
-def _on_through_line(train) -> bool:
-    try:
-        return isinstance(train, ActiveTrainData) and train.line in _THROUGH_LINES
-    except ValueError:
-        return False
-
-
-def _station_row(station_id: int) -> Optional[int]:
-    # 本線の行は出町柳(42)を1行目に、1駅3行ずつ大阪側へ進む
-    return (42 - station_id) * 3 + 1 if 4 <= station_id <= 42 else None
-
-
-def _barely_moving_rows() -> list[tuple[str, int]]:
-    # 2時間以上の遅れは公式の値が頭打ちなだけで進んでいないとは限らないので、前詰まりには数えない
-    return [(t.direction, t.location_row) for t in tracker.active_trains.values()
-            if _on_through_line(t) and _is_barely_moving(t)]
-
-
-def _blocked_ahead(train, station_row: Optional[int], blockers: list[tuple[str, int]]) -> bool:
-    if station_row is None or not _on_through_line(train):
-        return False
-    row = train.location_row
-    for direction, other in blockers:
-        if direction != train.direction:
-            continue
-        if (station_row <= other < row) if direction == "up" else (row < other <= station_row):
-            return True
-    return False
-
-
-def _within_estimate_window(minutes_remaining: float, delay: int) -> bool:
-    return (
-        (minutes_remaining <= 60 and delay <= 10)
-        or (minutes_remaining <= 25 and delay <= 60)
-    )
-
-
-def _corrected_delay_minutes(minutes_remaining: float, delay: int) -> float:
-    # 小さい遅れは香里園に着くまでに回復しやすいので、遠い列車ほど遅れを割り引く
-    if delay > 10:
-        return delay
-    return delay - min(delay, 0.1 * max(0.0, minutes_remaining))
-
-
 def _estimated_delay_minutes(train) -> Optional[int]:
     if train.delay_minutes < 120 or not isinstance(train, ActiveTrainData):
         return None
     try:
-        return train.estimated_delay_minutes if train.next_stop_station is not None else None
+        return train.estimated_delay_minutes if train.current_or_next_stop is not None else None
     except (ValueError, IndexError, KeyError, TypeError, AttributeError) as exc:
         print(f"Delay lower bound unavailable: {type(exc).__name__}")
         return None
@@ -235,20 +191,23 @@ templates = Jinja2Templates(directory="templates/minimal")
 
 
 async def update_train_loop():
+    global _cfg, _first_position_time, _last_pos_success
     while True:
+        # ライブラリは取得間隔の最小値（30秒）より短い interval を受け付けない
+        interval = max(_cfg["intervals"]["train_seconds"], tracker.rate_limit_interval)
         try:
-            global _cfg
-            _cfg = _load_config_file()
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching train positions...")
-            await _fetch_pos()
-            global _first_position_time
-            if _first_position_time is None:
-                _first_position_time = tracker.position_created_at
-            _update_suspension(datetime.datetime.now(JST))
-            print("Train fetch complete.")
+            async for _ in tracker.watch(interval, on_error="continue"):
+                _cfg = _load_config_file()
+                _last_pos_success = datetime.datetime.now(JST)
+                if _first_position_time is None:
+                    _first_position_time = tracker.position_created_at
+                _update_suspension(datetime.datetime.now(JST))
+                print("Train fetch complete.")
+                if max(_cfg["intervals"]["train_seconds"], tracker.rate_limit_interval) != interval:
+                    break
         except Exception as e:
             print(f"Error in train fetch: {e}")
-        await asyncio.sleep(_cfg["intervals"]["train_seconds"])
+            await asyncio.sleep(interval)
 
 
 async def update_bus_loop():
@@ -256,52 +215,43 @@ async def update_bus_loop():
     while True:
         try:
             print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Fetching bus info...")
-            bus_list = []
-            platform_buses = []
+            entries = []
             errors = []
+            stop_name = _cfg["buses"]["stop_name"]
             for num in _cfg["buses"]["stop_numbers"]:
                 try:
-                    res = await get_khbus_info(_cfg["buses"]["stop_name"], num)
-                    if res and res.body and res.body.busstates:
-                        for bus in res.body.busstates:
-                            platform_buses.append((num, bus))
-                            prms = bus.busstateprms
-                            bus_list.append(BusInfo(
-                                route_id=prms.route.replace("[", "").replace("]", ""),
-                                destination=prms.destination,
-                                status=prms.status,
-                                arrival_time=prms.timetable,
-                                stop_name=_cfg["buses"]["stop_name"],
-                                stop_arrival_is_scheduled="定刻" in prms.timetable,
-                            ))
+                    for arrival in await bus_client.arrivals(stop_name, num):
+                        prms = arrival.raw.busstateprms
+                        entries.append((num, arrival, BusInfo(
+                            route_id=arrival.route,
+                            destination=arrival.destination,
+                            status=prms.status,
+                            arrival_time=prms.timetable,
+                            stop_name=stop_name,
+                            stop_arrival_is_scheduled=arrival.status is BusStatus.NOT_TRACKED,
+                            scheduled_time=arrival.scheduled.strftime("%H:%M") if arrival.scheduled else arrival.raw.scheduled_time,
+                            delay_text=arrival.raw.delay_text,
+                            delay_minutes=arrival.delay_minutes,
+                        )))
                 except Exception as e_inner:
                     errors.append(f"のりば{num}: {e_inner}")
                     print(f"Error fetching bus stop {num}: {e_inner}")
 
-            if platform_buses:
+            if entries:
                 terminals = await bus_timetable.terminal_times(
-                    _cfg["buses"]["stop_name"], platform_buses, datetime.datetime.now(JST))
-                for bus, terminal in zip(bus_list, terminals):
+                    bus_client, stop_name, [(num, arrival) for num, arrival, _ in entries], datetime.datetime.now(JST))
+                for (_, _, bus), terminal in zip(entries, terminals):
                     if terminal is not None:
                         bus.terminal_arrival_time = terminal.time
                         bus.terminal_arrival_is_estimated = terminal.is_estimated
 
-            def parse_time(b: 'BusInfo'):
-                import re
-                match = re.search(r'(\d{1,2}):(\d{2})', b.arrival_time)
-                if match:
-                    h, m = int(match.group(1)), int(match.group(2))
-                    if h < 5:
-                        h += 24
-                    return h * 60 + m
-                return 9999
-
-            bus_list.sort(key=parse_time)
+            latest = datetime.datetime.max.replace(tzinfo=JST)
+            entries.sort(key=lambda entry: entry[1].expected or entry[1].scheduled or latest)
             if errors:
                 # 取得失敗を「接近なし」として表示しない。次に全のりばを取得できるまで前回の表示を保つ。
                 latest_bus_error = " / ".join(errors)
             else:
-                latest_bus_data = bus_list
+                latest_bus_data = [bus for _, _, bus in entries]
                 latest_bus_error = None
                 _last_bus_success = datetime.datetime.now(JST)
             print(f"Bus fetch complete (Count: {len(latest_bus_data)}).")
@@ -422,6 +372,8 @@ async def lifespan(app: FastAPI):
     for t in _tasks.values():
         t.cancel()
     await asyncio.gather(*_tasks.values(), return_exceptions=True)
+    await tracker.aclose()
+    await bus_client.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -477,7 +429,7 @@ def _position_view(train: ActiveTrainData, stopped_minutes: int, stop_threshold:
         else:
             text = f"{here.station_name.ja}で停止" if stopped else f"{here.station_name.ja}を通過中"
     else:
-        ref = train.next_station.station_number
+        ref = train.position.ahead.station_number
         prev = st1 if st2 == ref else st2
         text = f"{tracker.stations[prev].station_name.ja}→{tracker.stations[ref].station_name.ja}"
         if stopped:
@@ -508,6 +460,9 @@ class BusInfo(BaseModel):
     stop_arrival_is_scheduled: bool = False
     terminal_arrival_time: Optional[str] = None
     terminal_arrival_is_estimated: bool = False
+    scheduled_time: Optional[str] = None
+    delay_text: Optional[str] = None
+    delay_minutes: Optional[int] = None
 
 class BusResponse(BaseModel):
     buses: List[BusInfo]
@@ -611,7 +566,7 @@ def _line_train_fields(train, unreliable: bool) -> dict:
         suffix = "に停車中" if is_stop else ("で停止" if unreliable else "を通過中")
         text = here.station_name.ja + suffix
     else:
-        ref = train.next_station.station_number
+        ref = train.position.ahead.station_number
         prev = st1 if st2 == ref else st2
         text = f"{tracker.stations[prev].station_name.ja} → {tracker.stations[ref].station_name.ja} の間"
     return {"position_text": text, "stopped_minutes": _stopped_minutes(train)}
@@ -622,8 +577,7 @@ def _ordered_trains(station, min_minutes: int, max_per_dir: int, include_positio
     down_trains_list = []
     now = datetime.datetime.now(JST)
     stop_threshold = _cfg["trains"].get("stopped_minutes_threshold", 5)
-    station_row = _station_row(_cfg["trains"]["station_id"])
-    blockers = _barely_moving_rows()
+    policy = _eta_policy()
 
     for train, stop_data in station.upcoming_trains:
         if not stop_data.time:
@@ -633,23 +587,21 @@ def _ordered_trains(station, min_minutes: int, max_per_dir: int, include_positio
         # 2時間を超えると公式は「2時間以上」とだけ返し、ライブラリは下限の120分とする
         over_hours = delay >= 120
         estimated_delay = _estimated_delay_minutes(train)
-        expected_time = departure_time + datetime.timedelta(minutes=delay)
-        remaining = (expected_time - now).total_seconds() / 60
-        estimated_time = departure_time + datetime.timedelta(minutes=round(_corrected_delay_minutes(remaining, delay)))
-        minutes_val: Optional[int] = int((estimated_time - now).total_seconds() / 60)
+        eta = estimate_arrival(train, station, now=now, policy=policy)
 
         position_unreliable = _is_unreliable(train)
-        blocked = _blocked_ahead(train, station_row, blockers)
-        filter_minutes = None if position_unreliable or blocked else minutes_val
-        unreliable = position_unreliable or blocked or (delay >= 1 and not _within_estimate_window(remaining, delay))
-        if unreliable:
-            minutes_val = None
+        blocked = eta.reason is EtaHidden.BLOCKED_AHEAD
+        unreliable = position_unreliable or eta.time is None
+        # 予測範囲外で伏せた列車も、残り時間が短ければ一覧から外す。遅れが10分を超えると補正は0なので予定時刻＋遅れで足りる
+        shown_time = eta.time or departure_time + datetime.timedelta(minutes=delay)
+        minutes = int((shown_time - now).total_seconds() / 60)
+        filter_minutes = None if position_unreliable or blocked else minutes
+        minutes_val: Optional[int] = None if unreliable else minutes
 
         status_text = ""
         is_this_station = (
             isinstance(train, ActiveTrainData)
-            and train.is_stopping is True
-            and train.next_stop_station == station
+            and train.stopped_at == station
         )
         if over_hours:
             status_text = f"遅れ{estimated_delay}分以上" if estimated_delay and estimated_delay > 120 else "遅れ2時間以上"
@@ -675,7 +627,7 @@ def _ordered_trains(station, min_minutes: int, max_per_dir: int, include_positio
             kind=train.train_type.value,
             destination=destination.station_name.ja if destination is not None else "不明",
             time=departure_time.strftime("%H:%M"),
-            estimated_time=None if unreliable or over_hours else estimated_time.strftime("%H:%M"),
+            estimated_time=None if unreliable else eta.time.strftime("%H:%M"),
             delay=delay,
             estimated_delay_minutes=estimated_delay,
             status=status_text,
@@ -709,7 +661,7 @@ def _ordered_trains(station, min_minutes: int, max_per_dir: int, include_positio
 
 @app.api_route("/assets/{name}", methods=["GET", "HEAD"])
 async def screen_asset(name: str):
-    if name not in ("assembly.js", "opening.js", "weather.js"):
+    if name not in ("assembly.js", "opening.js", "weather.js", "chime.js", "chime-core.js"):
         raise HTTPException(404, "Asset not found")
     return FileResponse(Path(__file__).parent / "templates" / "minimal" / name,
                         media_type="text/javascript", headers={"Cache-Control": "no-store"})

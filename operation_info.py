@@ -51,7 +51,7 @@ DEFAULT_GROUPS = (
 )
 _SEVERITY = {status: index for index, status in enumerate((
     LineStatus.SUSPENDED, LineStatus.PARTIAL_SUSPENSION, LineStatus.DELAYED,
-    LineStatus.ALERT, LineStatus.NORMAL, LineStatus.UNKNOWN,
+    LineStatus.UNKNOWN, LineStatus.ALERT, LineStatus.NORMAL,
 ))}
 
 
@@ -66,10 +66,12 @@ def groups(tracker: Optional[Tracker], cfg: dict) -> list[dict]:
                  and (names is None or normalize("NFKC", line.name) in order)]
         lines.sort(key=lambda line: (_SEVERITY[line.status], order.get(normalize("NFKC", line.name), 0)))
         status = lines[0].status if lines else LineStatus.UNKNOWN
-        mark = "×" if status == LineStatus.SUSPENDED else "△" if status in _STATUS_LABEL else "−" if status == LineStatus.UNKNOWN else "○"
+        # 取得済みでも判定不能の路線があれば、平常運転に埋もれさせない。
+        unknown = bool(lines) and status == LineStatus.UNKNOWN
+        mark = "×" if status == LineStatus.SUSPENDED else "△" if status in _STATUS_LABEL else "！" if unknown else "−" if not lines else "○"
         result.append({
             "name": group["name"], "mark": mark,
-            "status": _STATUS_LABEL.get(status, "情報なし" if status == LineStatus.UNKNOWN else "平常運転"),
+            "status": _STATUS_LABEL.get(status, "状況不明" if unknown else "情報なし" if not lines else "平常運転"),
             "lines": [{
                 "name": normalize("NFKC", line.name if len(group["providers"]) == 1 else _display_name(line)),
                 "status": _label(line), "ticker_name": normalize("NFKC", _display_name(line)),

@@ -6,6 +6,8 @@ SCENARIOS = (
      "description": "停電時の実際の列車位置とダイヤを再生。一時停止・早送り・時刻指定で、そのときの動きを確認できます。"},
     {"id": "normal", "title": "通常運転", "mode": "static",
      "description": "各社とも平常運転。通常の発車案内と、運行情報の平常表示を確認できます。"},
+    {"id": "bus-delay", "title": "バスの遅延", "mode": "static",
+     "description": "定時・5分遅れ・1時間15分遅れ・遅れ情報なし・到着済み・まもなく到着を比較。定刻と到着予測、終点の時刻表を確認できます。"},
     {"id": "jr-loop", "title": "大阪環状線で人立ち入り", "mode": "static",
      "description": "環状線と乗り入れ路線が運転見合わせ。京阪は通常運転のまま、複数路線の切替を確認できます。"},
     {"id": "severe-weather", "title": "荒天で広域に影響", "mode": "static",
@@ -14,10 +16,20 @@ SCENARIOS = (
      "description": "荒天がさらに強まり、京阪の列車もすべて停止。両方面の停止表示と、多数の運行情報を確認できます。"},
     {"id": "display-patterns", "title": "列車カードの全表示パターン", "mode": "gallery",
      "description": "遅延・停止・到着予測の有無による全8通りを、通常表示と圧縮表示で比較。2時間以上の遅延や長時間停止なども確認できます。"},
+    {"id": "playground", "title": "ステータスと数値を操作", "mode": "playground",
+     "description": "路線ごとの運行ステータス、列車の遅延・停止時間、バスの遅れを自由に変更。サイネージの表示をその場で確認できます。"},
     {"id": "weather-cards", "title": "気象警報の札のしくみ", "mode": "weather",
      "description": "発表中の警報・警報の予想時系列・警報級の可能性を切り替えて、画面上部の札がどう決まるかを試せます。"},
     {"id": "startup-intro", "title": "起動イントロ", "mode": "intro",
-     "description": "ほのかな発光が強まる起動演出から、駅名・時計、京都方面、大阪方面、バス、運行情報へ。左から画面が組み上がる流れを確認できます。"},
+     "description": "黒い画面に京阪本線が引かれ、種別の色の光が行き交う。準急が香里園に止まると画面が駅に寄り、路線の線が見出しの下線になって、京都方面、大阪方面、バス、運行情報が左から組み上がる流れを確認できます。"},
+    {"id": "startup-intro-atlas", "title": "起動イントロ「測量」", "mode": "intro", "variant": "atlas",
+     "description": "同志社香里の座標から始まり、学校から広がる走査の輪に沿って地形・道路・建物が線だけの立体で立ち上がる。京阪本線が光って準急が香里園に止まると、真上へ回り込みながら駅に寄り、線路が見出しの下線になって発車案内が組み上がります。地図は OpenStreetMap と国土地理院の標高を加工したものです。"},
+    {"id": "clock-atlas", "title": "時計「測量」", "mode": "clock", "variant": "atlas",
+     "description": "起動イントロ「測量」の地図を背景にした時計。左に日付と大きな時刻を出し、後ろでは同志社香里と香里園のまわりの地形・道路・建物が線だけの立体で描かれて、視点がゆっくり回り続けます。20秒ごとに学校と駅から交互に波が広がって線が光り、京阪本線の上を種別の色の光が行き交います。止まった絵にならないので、交通情報を出さない時間帯の画面に使えます。地図は OpenStreetMap と国土地理院の標高を加工したものです。"},
+    {"id": "hourly-honsen", "title": "時報「本線」", "mode": "chime",
+     "description": "起動時の演出「本線」を時報用に組み直したもの。発車案内がほどけて見出しの下線が京阪本線に戻り、正時の7秒前から香里園の両側の明るい区間が1秒に2駅ずつ縮む。00秒に準急と普通が香里園に止まり、光が線を走って時計が切り替わってから、発車案内が組み上がります。0〜23時を選んで再生できます。"},
+    {"id": "hourly-honsen-hype", "title": "時報「本線」わくわく", "mode": "chime", "variant": "hype",
+     "description": "時報「本線」のわくわく版。正時が近づくにつれて色とりどりの光が増え、香里園を通るたびに輪へその色がたまって、駅のまわりが明るくなっていく。秒の数字は1秒ごとに光を強めながら大きくなり、00秒の到着で、たまった色の光が線の両側へいっせいに弾けます。0〜23時を選んで再生できます。"},
 )
 
 _STATIONS = tuple(enumerate((
@@ -89,7 +101,7 @@ def _notice(name, status, detail, prefix=""):
 
 
 def _groups(scenario_id):
-    if scenario_id == "normal":
+    if scenario_id in ("normal", "bus-delay"):
         return [_group(name) for name in ("京阪", "大阪メトロ", "JR", "大阪モノレール", "近鉄", "その他の私鉄")]
     if scenario_id == "jr-loop":
         detail = "大阪環状線内での線路内人立ち入りのため、安全確認を行っています。環状線と乗り入れ路線で運転を見合わせています。"
@@ -157,11 +169,29 @@ def static_scenario(scenario_id):
         "directions": {direction: {"state": "stopped" if stopped else "delayed" if weather else "normal",
             "next": trains[direction + "_trains"][:2]} for direction in ("up", "down")}}
     groups = _groups(scenario_id)
-    return {"version": 1, "mode": "static", "timestamp": _REFERENCE.timestamp(), "trains": trains, "line": line,
+    data = {"version": 1, "mode": "static", "timestamp": _REFERENCE.timestamp(), "trains": trains, "line": line,
         "buses": {"buses": [{"route_id": "22", "destination": "京阪香里園" if i % 2 == 0 else "寝屋川市駅",
             "stop_name": "同志社香里", "stop_arrival_is_scheduled": False,
             "terminal_arrival_time": None if weather else (_REFERENCE + datetime.timedelta(minutes=8 + i * 10 + (19 if i % 2 == 0 else 12))).strftime("%H:%M"),
-            "arrival_time": "荒天のため運休" if weather else (_REFERENCE + datetime.timedelta(minutes=8 + i * 10)).strftime("%H:%M") + " 着予定",
-            "status": "運休" if weather else f"約{8 + i * 10}分後に到着"} for i in range(6)], "error": None},
+            "arrival_time": (_REFERENCE + datetime.timedelta(minutes=8 + i * 10 + (15 if weather else 0))).strftime("%H:%M") + " 到着予定",
+            "status": f"約{8 + i * 10 + (15 if weather else 0)}分後に到着",
+            **({"scheduled_time": (_REFERENCE + datetime.timedelta(minutes=8 + i * 10)).strftime("%H:%M"),
+                "delay_text": "約15分遅れ", "delay_minutes": 15} if weather else {})} for i in range(6)], "error": None},
         "delays": {"groups": groups, "delays": [{"line": line["ticker_name"], **{key: line[key] for key in ("status", "detail", "announced_time")}}
             for group in groups for line in group["lines"]], "error": None}}
+    if scenario_id == "bus-delay":
+        data["buses"]["buses"] = [
+            {"route_id": "22", "destination": "京阪香里園行" if i % 2 == 0 else "寝屋川市駅行",
+             "stop_name": "同志社香里", "scheduled_time": scheduled, "arrival_time": arrival,
+             "delay_text": text, "delay_minutes": delay, "status": status,
+             "stop_arrival_is_scheduled": i == 3, "terminal_arrival_time": terminal,
+             "terminal_arrival_is_estimated": False}
+            for i, (scheduled, arrival, text, delay, status, terminal) in enumerate((
+                ("15:08", "15:08 到着予定", "定時運行中", 0, "約8分後に到着", "15:27"),
+                ("15:03", "15:08 到着予定", "約5分遅れ", 5, "約8分後に到着", "15:15"),
+                ("14:01", "15:16 到着予定", "約1時間15分遅れ", 75, "約16分後に到着", "14:20"),
+                ("15:24", "定刻 15:24", None, None, "約24分後に到着", "15:36"),
+                ("14:59", "15:00 到着予定", "到着済", None, "到着済", "15:18"),
+                (None, "15:01 到着予定", None, None, "まもなく到着", "15:13"),
+            ))]
+    return data

@@ -116,7 +116,7 @@ def test_groups_severity_order_names_and_details():
     groups = operation_info.groups(tracker, {})
     assert [g["name"] for g in groups] == ["京阪", "大阪メトロ", "JR", "大阪モノレール", "近鉄", "その他の私鉄"]
     assert [(g["mark"], g["status"]) for g in groups] == [
-        ("○", "平常運転"), ("○", "平常運転"), ("×", "運転見合わせ"), ("−", "情報なし"), ("−", "情報なし"), ("△", "列車遅延"),
+        ("！", "状況不明"), ("○", "平常運転"), ("×", "運転見合わせ"), ("−", "情報なし"), ("−", "情報なし"), ("△", "列車遅延"),
     ]
     assert [line["name"] for line in groups[2]["lines"]] == ["JR京都線", "大阪環状線", "奈良線", "学研都市線"]
     assert groups[2]["lines"][0]["detail"] == "線路確認中"
@@ -127,8 +127,26 @@ def test_groups_severity_order_names_and_details():
 
 def test_groups_missing_and_unknown_are_not_normal():
     groups = operation_info.groups(_FakeTracker([_line("keihan", "京阪本線", LineStatus.UNKNOWN)]), {})
-    assert all(g["mark"] == "−" and g["status"] == "情報なし" and not g["lines"] for g in groups)
-    assert operation_info.groups(None, {}) == groups
+    assert (groups[0]["mark"], groups[0]["status"], groups[0]["lines"]) == ("！", "状況不明", [])
+    assert all(g["mark"] == "−" and g["status"] == "情報なし" and not g["lines"] for g in groups[1:])
+    assert all(g["mark"] == "−" and g["status"] == "情報なし" for g in operation_info.groups(None, {}))
+
+
+@pytest.mark.parametrize(("status", "mark", "label"), [
+    (LineStatus.NORMAL, "！", "状況不明"),
+    (LineStatus.ALERT, "！", "状況不明"),
+    (LineStatus.DELAYED, "△", "列車遅延"),
+    (LineStatus.PARTIAL_SUSPENSION, "△", "部分運休"),
+    (LineStatus.SUSPENDED, "×", "運転見合わせ"),
+])
+def test_groups_unknown_in_mixed_provider_group(status, mark, label):
+    tracker = _FakeTracker([
+        _line("hanshin", "阪神本線", LineStatus.UNKNOWN),
+        _line("hankyu", "京都線", status),
+    ])
+    group = operation_info.groups(tracker, {})[-1]
+    assert (group["mark"], group["status"]) == (mark, label)
+    assert all(line["name"] != "阪神本線" for line in group["lines"])
 
 
 def test_groups_custom_order_and_only_lines():

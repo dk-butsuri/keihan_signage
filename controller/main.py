@@ -283,6 +283,11 @@ async def proxy_demo_root(request: Request):
     return await _proxy(TRANSIT_URL, "demo", request)
 
 
+@app.post("/demo/playground/evaluate")
+async def proxy_playground_evaluate(request: Request):
+    return await _proxy(TRANSIT_URL, "demo/playground/evaluate", request)
+
+
 @app.api_route("/demo/{path:path}", methods=["GET", "HEAD"])
 async def proxy_demo(path: str, request: Request):
     return await _proxy(TRANSIT_URL, f"demo/{path}", request)

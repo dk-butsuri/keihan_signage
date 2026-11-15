@@ -26,6 +26,24 @@ def test_proxy_preserves_preview_and_repeated_query_params(monkeypatch):
     client.close()
 
 
+def test_playground_proxy_forwards_input_without_changing_live_mode(monkeypatch):
+    received = []
+    def upstream(request):
+        received.append(request)
+        return httpx.Response(200, json={"demo": True}, headers={"cache-control": "no-store"})
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(controller.httpx, 'AsyncClient', lambda **kwargs: client_type(
+        transport=httpx.MockTransport(upstream), **kwargs))
+    mode = controller.current_mode
+    client = TestClient(controller.app)
+    response = client.post('/demo/playground/evaluate', json={"train_delay": 12})
+    assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+    assert received[0].method == 'POST' and received[0].url.path == '/demo/playground/evaluate'
+    assert received[0].read() == b'{"train_delay":12}'
+    assert controller.current_mode == mode
+    client.close()
+
+
 @pytest.mark.parametrize('path,upstream_path', [
     ('/demo', '/demo'), ('/demo/', '/demo'),
     ('/demo/data', '/demo/data'), ('/demo/player.js', '/demo/player.js'),

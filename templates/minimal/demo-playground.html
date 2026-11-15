@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ demo.title }} · 京阪サイネージ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif;line-height:1.65;font-variant-numeric:tabular-nums}
+main{max-width:1920px;margin:auto;padding:28px 32px 40px}a{color:#D9D9D6}h1{font-size:28px;font-weight:500;margin:16px 0 8px}h2{font-size:18px;font-weight:500;margin:0}p{margin:8px 0}.intro,.hint{color:#A1A1A6;font-size:14px}.intro{margin-bottom:20px}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}.preview{position:sticky;top:20px;min-width:0}.preview-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.preview-head p{font-size:13px;color:#A1A1A6;margin:0}.stage{aspect-ratio:16/9;background:#151517;border:1px solid #303036;position:relative;overflow:hidden}.stage iframe{width:100%;height:100%;border:0;display:block}.loading{position:absolute;inset:0;display:grid;place-items:center;background:#151517}.loading[hidden]{display:none}
+button,input,select,textarea{font:inherit;color:inherit;background:#202024;border:1px solid #4A4A50;border-radius:4px;max-width:100%}button,select{min-height:40px;padding:6px 10px}button{cursor:pointer}button:hover{border-color:#A1A1A6}button[aria-pressed=true]{color:#0B0B0C;background:#F1F1EE;border-color:#F1F1EE}:focus-visible{outline:2px solid #F1F1EE;outline-offset:3px}input[type=number]{width:82px;padding:6px 8px;min-height:40px}input[type=checkbox]{width:18px;height:18px;accent-color:#F1F1EE}textarea{width:100%;resize:vertical;padding:8px;font-size:14px}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.presets button{font-size:14px}.explain{color:#A1A1A6;font-size:14px;min-height:3.3em}.controls{min-width:0}.panel{border:1px solid #303036;background:#151517;border-radius:6px;padding:18px;margin-bottom:16px}.panel>h2{margin-bottom:12px}.field{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0;font-size:14px}.field>span:last-child{display:flex;align-items:center;gap:7px}.field select{font-size:14px}.hint{font-size:12px}.routes-title{display:flex;align-items:center;gap:12px;justify-content:space-between}.routes-title select{max-width:185px;font-size:14px}.bulk{display:flex;gap:8px;align-items:center;margin:12px 0}.bulk select{min-width:0;flex:1;font-size:14px}.bulk button{font-size:13px;white-space:nowrap}.route{border-top:1px solid #303036;padding-top:12px;margin-top:12px}.route-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.route-head label{font-size:14px;min-width:0;overflow-wrap:anywhere}.route-head select{width:162px;flex-shrink:0;font-size:13px}.route details{margin-top:8px;font-size:13px}.route summary{color:#A1A1A6;cursor:pointer}.route .field{font-size:13px}.route textarea{margin-top:8px}.result{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#202024;border-radius:4px;margin-top:12px;font-size:14px}.result b{font-size:22px;line-height:1}.result.warning{color:#FF5B2E}.result.normal b{color:#30D158}.error{color:#FF5B2E;font-size:14px}.error[hidden]{display:none}.preview-actions{display:flex;align-items:center;gap:12px}.preview-actions button{font-size:13px}.badge{font-size:12px;color:#A1A1A6;letter-spacing:.08em}
+@media(min-width:1200px){.controls{max-height:calc(100vh - 200px);overflow:auto;padding-right:8px;scrollbar-color:#4A4A50 transparent}}
+@media(max-width:1050px){.workspace{grid-template-columns:1fr}.preview{position:static}.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.panel{margin:0}.operations{grid-column:1/-1}.route-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}}
+@media(max-width:600px){main{padding:20px 16px 32px}h1{font-size:24px}.workspace{gap:16px}.controls{display:block}.panel{margin-bottom:16px;padding:14px}.route-list{display:block}.preview-head{align-items:flex-start}.preview-head p{display:none}.presets{gap:6px}.presets button{font-size:12px;min-height:36px}.explain{font-size:13px}.preview-actions{gap:6px}.preview-actions button{font-size:12px}}
+</style></head><body><main>
+<header><a id="playground-back" href="/demo">← デモ一覧</a><h1>{{ demo.title }}</h1><p class="intro">値を変えると、サイネージにそのまま反映されます。運行情報・時刻は架空です。本番の設定や表示には影響しません。</p></header>
+<div class="workspace">
+<section class="preview" aria-label="サイネージのプレビュー">
+<div class="preview-head"><h2>プレビュー</h2><div class="preview-actions"><span class="badge">架空の想定</span><button id="fullscreen" type="button">全画面で見る</button></div></div>
+<div class="stage" id="stage"><iframe id="preview" title="操作した値のサイネージ表示" allow="fullscreen"></iframe><div class="loading" id="loading" role="status">デモを読み込み中…</div></div>
+<div class="presets" id="presets" role="group" aria-label="場面"></div>
+<p class="explain" id="story"></p><p class="error" id="error" role="alert" hidden></p>
+<button id="retry" type="button" hidden>再読み込み</button>
+</section>
+<div class="controls" id="controls" inert>
+<section class="panel operations" aria-label="運行情報の設定">
+<div class="routes-title"><h2>右側の運行情報</h2><select id="group" aria-label="編集するグループ"></select></div>
+<div class="result" id="group-result" aria-live="polite"></div>
+<div class="bulk"><select id="bulk-status" aria-label="グループの一括ステータス"></select><button id="bulk-apply" type="button">まとめて変更</button></div>
+<p class="hint">路線ごとに状態を選べます。「発表文・経過時間」で、下部に出す文章や「何分前」も変更できます。</p>
+<div class="route-list" id="routes"></div>
+</section>
+<section class="panel" aria-label="列車の設定"><h2>列車</h2>
+<label class="field"><span>画面</span><select id="screen"><option value="normal">通常の発車案内</option><option value="suspended">見合わせ時の路線図</option></select></label>
+<label class="field"><span>遅延（全列車）</span><span><input id="train-delay" type="number" min="0" max="240" value="0">分</span></label>
+<label class="field"><span>停止時間（全列車）</span><span><input id="train-stop" type="number" min="0" max="240" value="0">分</span></label>
+<label class="field"><span>先頭列車の到着まで</span><span><input id="train-remaining" type="number" min="15" max="180" value="18">分</span></label>
+<label class="field"><span>表示本数（各方面）</span><span><input id="train-count" type="number" min="1" max="6" value="4">本</span></label>
+<label class="field"><span>到着予測を表示する</span><input id="predictions" type="checkbox" checked></label>
+<p class="hint">停止中・120分以上の遅延では到着予測を表示しません。路線ステータスと画面の切替は個別に試せます。</p>
+</section>
+<section class="panel" aria-label="バスの設定"><h2>バス</h2>
+<label class="field"><span>遅延（全便）</span><span><input id="bus-delay" type="number" min="0" max="240" value="0">分</span></label>
+<label class="field"><span>遅れ情報なし</span><input id="bus-unknown" type="checkbox"></label>
+<label class="field"><span>先頭便の到着まで</span><span><input id="bus-remaining" type="number" min="0" max="180" value="8">分</span></label>
+<label class="field"><span>便数</span><span><input id="bus-count" type="number" min="0" max="6" value="4">便</span></label>
+<label class="field"><span>先頭便は到着済み</span><input id="bus-arrived" type="checkbox"></label>
+</section>
+</div></div>
+</main><script>
+const script=document.createElement('script');script.src=location.pathname.replace(/\/$/,'')+'/player.js';
+script.onerror=()=>{document.getElementById('loading').textContent='デモを読み込めませんでした。';const retry=document.getElementById('retry');retry.hidden=false;retry.onclick=()=>location.reload();};
+document.body.append(script);
+</script></body></html>

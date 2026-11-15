@@ -23,7 +23,8 @@ function inspectFrames(frames) {
         }
         for(const card of document.querySelectorAll('#'+visible+'-bus-list .bus-card')) {
             const r=card.getBoundingClientRect();
-            for(const el of card.querySelectorAll('.bus-depart,.bus-status,.bus-destination,.bus-arrive')) {
+            for(const el of card.querySelectorAll('.bus-depart,.bus-status,.bus-destination,.bus-arrive,.bus-timing,.bus-delay')) {
+                if(!el.getClientRects().length)continue;
                 const e=el.getBoundingClientRect();
                 if(el.scrollWidth>el.clientWidth+1||e.top<r.top-.1||e.bottom>r.bottom+.1||e.right>r.right+.1)problems.push('bus text clipped: '+el.textContent);
             }
@@ -118,7 +119,7 @@ function inspectFrames(frames) {
         const pathname=new URL(route.request().url()).pathname;
         if(pathname==='/')return route.fulfill({contentType:'text/html',body:fs.readFileSync(root+'/templates/minimal/index.html','utf8').replace('{{ config | tojson }}',JSON.stringify({features:{trains:true,buses:true,delays:true},buses:{stop_name:'同志社香里'}}))});
         const name=pathname.split('/').at(-1),frame=replay.frames[0];
-        const data=name==='trains'?frame.trains:name==='line'?frame.line:name==='delays'?{delays:[],groups}:name==='buses'?{buses:Array.from({length:6},(_,i)=>({destination:i%2?'寝屋川市駅行':'京阪香里園行',arrival_time:'12:13 到着予定',status:'約11分後に到着'}))}:name==='time'?{ts:Date.now()/1000,ntp_rtt_ms:0}:{};
+        const data=name==='trains'?frame.trains:name==='line'?frame.line:name==='delays'?{delays:[],groups}:name==='buses'?{buses:Array.from({length:6},(_,i)=>({destination:i%2?'寝屋川市駅行':'京阪香里園行',arrival_time:'12:13 到着予定',status:'約11分後に到着',scheduled_time:'12:08',terminal_arrival_time:'12:32',delay_text:i%2?'約1時間15分遅れ':'約5分遅れ',delay_minutes:i%2?75:5}))}:name==='time'?{ts:Date.now()/1000,ntp_rtt_ms:0}:{};
         return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
     });
     await page.goto('http://responsive.test/?motion=off');await page.evaluate(()=>document.fonts.ready);

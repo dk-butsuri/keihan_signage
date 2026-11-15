@@ -12,13 +12,13 @@ const os=require('os');
     page.on('request',r=>{if(/\/(api|transit\/api)\//.test(new URL(r.url()).pathname))live.push(r.url());});
     await page.clock.install();
     await page.goto(root+'/');
-    assert.equal(await page.locator('[data-demo-id]').count(),7);
+    assert.equal(await page.locator('[data-demo-id]').count(),14);
     assert.equal(await page.locator('a.card.recorded').count(),1);
     await page.evaluate(()=>document.fonts.ready);
-    assert.ok(await page.locator('a.card').last().evaluate(e=>e.getBoundingClientRect().bottom<innerHeight), 'all scenarios should be visible on a desktop');
+    assert.equal(await page.locator('[data-demo-id="bus-delay"]').count(),1);
     await page.screenshot({path:out+'/demo-catalog.png'});
     await page.getByRole('link',{name:/荒天で広域に影響/}).click();
-    const scenarios=['severe-weather','all-stopped','jr-loop','normal'];
+    const scenarios=['severe-weather','all-stopped','jr-loop','normal','bus-delay'];
     for(const id of scenarios) {
         if(id!==scenarios[0])await page.getByRole('combobox',{name:'デモ選択',exact:true}).selectOption(id);
         await page.waitForURL(root+'/'+id);
@@ -33,7 +33,7 @@ const os=require('os');
         const before=await page.locator('#clock-time').textContent();
         await page.clock.runFor(6500);
         assert.equal(await page.locator('#clock-time').textContent(),before);
-        if(id==='normal')assert.equal(await page.locator('#operation-slides').isVisible(),false);
+        if(id==='normal'||id==='bus-delay')assert.equal(await page.locator('#operation-slides').isVisible(),false);
         else {
             assert.equal(await page.locator('#operation-slides').isVisible(),true);
             assert.equal(await page.locator('#operation-viewport .operation-page').last().getAttribute('data-page'),'1');
@@ -41,6 +41,24 @@ const os=require('os');
         if(id==='all-stopped') {
             assert.deepEqual(await page.locator('#suspended [data-field="state"]').allTextContents(),['止まっています','止まっています']);
             assert.ok(await page.evaluate(()=>lineData.stopped===lineData.total));
+        }
+        if(id==='bus-delay') {
+            const cards=page.locator('#normal-bus-list .bus-card');
+            assert.equal(await cards.count(),6);
+            assert.deepEqual(await page.locator('#normal-bus-list .bus-delay:visible').allTextContents(),['定時運行中','約5分遅れ','約1時間15分遅れ','遅れ情報なし','到着済']);
+            assert.equal(await page.locator('#normal-bus-list .is-delayed').count(),2);
+            assert.equal(await cards.nth(1).locator('[data-field="scheduled-time"]').textContent(),'定刻 15:03');
+            assert.equal(await cards.nth(1).locator('[data-field="arrival"]').textContent(),'15:08発');
+            assert.equal(await cards.nth(1).locator('[data-field="terminal-time"]').textContent(),'定刻15:15着');
+            assert.equal(await cards.nth(5).locator('[data-field="timing"]').isVisible(),false);
+            assert.equal(await cards.nth(5).locator('[data-field="status"]').textContent(),'まもなく');
+            const clipped=await cards.evaluateAll(cards=>cards.flatMap(card=>{
+                const r=card.getBoundingClientRect();
+                return [...card.querySelectorAll('.bus-timing,.bus-delay,.bus-depart,.bus-status,.bus-destination,.bus-arrive')].filter(e=>e.getClientRects().length).filter(e=>{
+                    const b=e.getBoundingClientRect();return e.scrollWidth>e.clientWidth+1||b.top<r.top||b.bottom>r.bottom||b.right>r.right;
+                }).map(e=>e.textContent);
+            }));
+            assert.deepEqual(clipped,[]);
         }
         const layout=await page.evaluate(()=>{
             const box=el=>el.getBoundingClientRect(),screen=box($('screen')),dock=box($('demo-dock'));

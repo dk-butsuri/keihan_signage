@@ -2,11 +2,13 @@ from pathlib import Path
 import re
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from demo_scenarios import SCENARIOS, display_patterns, static_scenario
 import weather_demo
+import demo_playground
 
 
 router = APIRouter()
@@ -14,6 +16,7 @@ DATA_FILE = Path(__file__).parent / "demo-data/replay.json"
 PLAYER_FILE = Path(__file__).parent / "templates/minimal/demo.js"
 PATTERN_PLAYER_FILE = PLAYER_FILE.with_name("demo-patterns.js")
 INTRO_PLAYER_FILE = PLAYER_FILE.with_name("demo-intro.js")
+ATLAS_MAP_FILE = PLAYER_FILE.with_name("demo-intro-atlas-map.json")
 WEATHER_PLAYER_FILE = PLAYER_FILE.with_name("demo-weather.js")
 ASSEMBLY_PLAYER_FILE = PLAYER_FILE.with_name("assembly.js")
 MARKED_FILE = PLAYER_FILE.with_name("marked.min.js")
@@ -65,9 +68,9 @@ async def readme_renderer():
 @router.api_route("/demo/readme/images/{name}", methods=["GET", "HEAD"])
 async def readme_image(name: str):
     path = README_IMAGES / name
-    if not re.fullmatch(r"[a-z0-9-]+\.png", name) or not path.is_file():
+    if not re.fullmatch(r"[a-z0-9-]+\.(png|gif)", name) or not path.is_file():
         raise HTTPException(404, "画像が見つかりません")
-    return FileResponse(path, media_type="image/png", headers=_HEADERS)
+    return FileResponse(path, media_type="image/" + name.rsplit(".", 1)[1], headers=_HEADERS)
 
 
 @router.api_route("/demo/data", methods=["GET", "HEAD"])
@@ -87,9 +90,33 @@ async def data(scenario_id: str):
         return _recording()
     if scenario["mode"] == "gallery":
         return JSONResponse(display_patterns(), headers=_HEADERS)
-    if scenario["mode"] in ("intro", "weather"):
+    if scenario["mode"] == "playground":
+        return JSONResponse(jsonable_encoder(demo_playground.bootstrap()), headers=_HEADERS)
+    if scenario["mode"] in ("intro", "chime", "weather", "clock"):
         raise HTTPException(404, "このデモに運行データはありません")
     return JSONResponse(static_scenario(scenario_id), headers=_HEADERS)
+
+
+@router.post("/demo/playground/evaluate")
+async def playground_evaluate(state: demo_playground.PlaygroundState):
+    try:
+        return JSONResponse(jsonable_encoder(demo_playground.evaluate(state)), headers=_HEADERS)
+    except ValueError as error:
+        raise HTTPException(400, str(error))
+
+
+@router.api_route("/demo/playground/preview", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def playground_preview(request: Request):
+    return templates.TemplateResponse(request, "index.html", {
+        "station_name": "", "config": {"demo": {"id": "playground", "mode": "playground-preview"},
+            "features": {"trains": True, "buses": True, "delays": True},
+            "buses": {"stop_name": "同志社香里"}},
+    }, headers=_HEADERS)
+
+
+@router.api_route("/demo/playground/preview/player.js", methods=["GET", "HEAD"])
+async def playground_preview_player():
+    return FileResponse(PLAYER_FILE.with_name("demo-preview.js"), media_type="text/javascript", headers=_HEADERS)
 
 
 @router.api_route("/demo/{scenario_id}/weather", methods=["GET", "HEAD"])
@@ -105,15 +132,33 @@ async def weather_cards(scenario_id: str, state: str = "{}"):
 @router.api_route("/demo/{scenario_id}/player.js", methods=["GET", "HEAD"])
 async def player(scenario_id: str):
     scenario = _scenario(scenario_id)
-    player_file = {"gallery": PATTERN_PLAYER_FILE, "intro": INTRO_PLAYER_FILE, "weather": WEATHER_PLAYER_FILE}.get(scenario["mode"], PLAYER_FILE)
+    player_file = {"gallery": PATTERN_PLAYER_FILE, "intro": INTRO_PLAYER_FILE,
+                   "chime": PLAYER_FILE.with_name("demo-chime.js"), "weather": WEATHER_PLAYER_FILE,
+                   "playground": PLAYER_FILE.with_name("demo-playground.js")}.get(scenario["mode"], PLAYER_FILE)
+    if scenario.get("variant") == "atlas":
+        player_file = PLAYER_FILE.with_name("demo-clock-atlas.js" if scenario["mode"] == "clock" else "demo-intro-atlas.js")
     return FileResponse(player_file, media_type="text/javascript", headers=_HEADERS)
+
+
+@router.api_route("/demo/{scenario_id}/chime-core.js", methods=["GET", "HEAD"])
+async def chime_core(scenario_id: str):
+    if _scenario(scenario_id)["mode"] != "chime":
+        raise HTTPException(404, "このデモに時報の演出はありません")
+    return FileResponse(PLAYER_FILE.with_name("chime-core.js"), media_type="text/javascript", headers=_HEADERS)
 
 
 @router.api_route("/demo/{scenario_id}/weather.js", methods=["GET", "HEAD"])
 async def weather_renderer(scenario_id: str):
-    if _scenario(scenario_id)["mode"] != "weather":
+    if _scenario(scenario_id)["mode"] not in ("weather", "clock"):
         raise HTTPException(404, "このデモに気象警報の札はありません")
     return FileResponse(PLAYER_FILE.with_name("weather.js"), media_type="text/javascript", headers=_HEADERS)
+
+
+@router.api_route("/demo/{scenario_id}/map.json", methods=["GET", "HEAD"])
+async def atlas_map(scenario_id: str):
+    if _scenario(scenario_id).get("variant") != "atlas":
+        raise HTTPException(404, "このデモに地図はありません")
+    return FileResponse(ATLAS_MAP_FILE, media_type="application/json", headers=_HEADERS)
 
 
 @router.api_route("/demo/{scenario_id}/assembly.js", methods=["GET", "HEAD"])
@@ -127,8 +172,17 @@ async def assembly_player(scenario_id: str):
 @router.api_route("/demo/{scenario_id}/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def display(scenario_id: str, request: Request):
     scenario = _scenario(scenario_id)
+    if scenario["mode"] == "playground":
+        return templates.TemplateResponse(request, "demo-playground.html",
+                                          {"demo": scenario}, headers=_HEADERS)
     if scenario["mode"] == "intro":
-        return templates.TemplateResponse(request, "demo-intro.html",
+        return templates.TemplateResponse(request, "demo-intro-atlas.html" if scenario.get("variant") == "atlas" else "demo-intro.html",
+                                          {"demo": scenario, "demos": _catalog()}, headers=_HEADERS)
+    if scenario["mode"] == "clock":
+        return templates.TemplateResponse(request, "demo-clock-atlas.html",
+                                          {"demo": scenario, "demos": _catalog()}, headers=_HEADERS)
+    if scenario["mode"] == "chime":
+        return templates.TemplateResponse(request, "demo-chime.html",
                                           {"demo": scenario, "demos": _catalog()}, headers=_HEADERS)
     if scenario["mode"] == "weather":
         return templates.TemplateResponse(request, "demo-weather.html",

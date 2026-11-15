@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400&amp;family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap">
+<title>{{ demo.title }} · 京阪サイネージ</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font:16px/1.6 'Zen Kaku Gothic New',system-ui,sans-serif}main{max-width:1320px;margin:auto;padding:28px 32px 40px}a{color:#D9D9D6}nav{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}h1{font-size:28px;line-height:1.4;font-weight:500;margin:20px 0 8px}.description{color:#A1A1A6;margin:0 0 20px}.choice{display:flex;gap:10px;align-items:center;min-width:0}select,button{font:inherit;min-height:44px;padding:6px 12px;background:#202024;color:#F1F1EE;border:1px solid #4A4A50;border-radius:4px}select{min-width:0;max-width:100%}button:disabled,select:disabled{opacity:.5}:focus-visible{outline:2px solid #F1F1EE;outline-offset:3px}
+#chime-demo{display:grid;gap:12px}#chime-demo [data-action=play]{background:#F1F1EE;color:#151517}
+.chime-stage{isolation:isolate;position:relative;aspect-ratio:16/9;background:#0B0B0C;overflow:hidden;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif}
+.chime-board,.chime-rail,.chime-title{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;pointer-events:none;border:0}
+.chime-board{z-index:0;visibility:hidden}.chime-rail{z-index:1}.chime-title{z-index:2;white-space:nowrap}
+.chime-group{position:absolute;left:120px;top:300px;font-size:20px;font-weight:500;line-height:1;color:#7C7C82;letter-spacing:.24em}
+.chime-date{position:absolute;left:120px;top:344px;font-size:36px;font-weight:400;letter-spacing:.06em;line-height:1;color:#A1A1A6}
+.chime-clock{position:absolute;left:112px;top:404px;display:flex;align-items:baseline;gap:8px;font-weight:300;line-height:.9;font-variant-numeric:tabular-nums}
+.chime-time{display:flex;font-size:168px}.chime-seconds{display:flex;font-size:84px;color:#A1A1A6}
+.chime-ch{display:inline-block;white-space:pre;will-change:transform,opacity}.chime-time .chime-ch,.chime-seconds .chime-ch{flex:0 0 .58em;width:.58em;text-align:center}.chime-ch.is-separator{flex-basis:.22em;width:.22em}
+.controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}.controls label{display:flex;gap:8px;align-items:center}
+.readout{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:14px;font-variant-numeric:tabular-nums;color:#A1A1A6}
+input[type=range]{width:100%;height:36px;margin:0;accent-color:#F1F1EE}[role=status]{font-size:14px;color:#A1A1A6}[role=alert]{color:#F3AAAA}
+@media(max-width:680px){main{padding:20px 16px 32px}.choice{width:100%}.choice select{flex:1}h1{font-size:24px}.description{font-size:14px}}
+</style>
+</head>
+<body><main>
+<header><nav aria-label="デモの選択"><a id="chime-back" href="/demo">← デモ一覧</a><label class="choice">デモ<select id="chime-demo-choice" aria-label="デモ選択">{% for item in demos %}<option value="{{ item.id }}" {% if item.id == demo.id %}selected{% endif %} {% if not item.available %}disabled{% endif %}>{{ item.title }}</option>{% endfor %}</select></label></nav><h1>{{ demo.title }}</h1><p class="description">{{ demo.description }} 音声なしのプレビューです。</p></header>
+<div id="chime-demo" data-variant="{{ demo.variant or '' }}">
+  <div class="chime-stage" role="img" aria-label="時報のプレビュー。発車案内がほどけて見出しの下線が京阪本線に戻り、正時の7秒前から香里園の両側の明るい区間が1秒ごとに縮む。00秒に準急と普通が香里園に止まり、光が線を走って時計が切り替わり、発車案内が組み上がります。">
+    <canvas class="chime-rail" width="1920" height="1080" aria-hidden="true"></canvas>
+    <div class="chime-title" aria-hidden="true"><div class="chime-group"></div><div class="chime-date"></div><div class="chime-clock"><div class="chime-time"></div><div class="chime-seconds"></div></div></div>
+  </div>
+  <div class="controls">
+    <label>時報の時刻<select id="chime-hour" aria-label="時報の時刻" disabled>{% for hour in range(24) %}<option value="{{ hour }}" {% if hour == 15 %}selected{% endif %}>{{ '%02d'|format(hour) }}:00</option>{% endfor %}</select></label>
+    <button type="button" data-action="play" disabled>最初から再生</button>
+    <button type="button" data-action="restart" disabled>やり直す</button>
+    <button type="button" data-action="hour" disabled>正時の直前から</button>
+    <button type="button" data-action="previous" aria-label="1フレーム戻る" disabled>−1 F</button>
+    <button type="button" data-action="next" aria-label="1フレーム進む" disabled>＋1 F</button>
+    <span role="status" aria-live="polite">プレビューを準備中</span>
+  </div>
+  <div><div class="readout"><label for="chime-frame">再生位置 <output data-time aria-live="off">0.00 / 15.50 秒</output></label><span data-phase>離れる</span><output data-frame aria-live="off">0 / 929 F · 60 fps</output></div><input id="chime-frame" type="range" min="0" max="929" value="0" step="1" disabled></div>
+</div>
+</main><script>
+const base=location.pathname.replace(/\/$/,''),catalog=base.slice(0,base.lastIndexOf('/'));
+document.getElementById('chime-back').href=catalog;
+document.getElementById('chime-demo-choice').addEventListener('change',event=>location.assign(catalog+'/'+event.target.value));
+const script=document.createElement('script');script.type='module';script.src=base+'/player.js';
+script.onerror=()=>{const status=document.querySelector('#chime-demo [role=status]');status.textContent='時報を読み込めませんでした。再読み込みしてください。';status.setAttribute('role','alert');};
+document.body.append(script);
+</script></body></html>

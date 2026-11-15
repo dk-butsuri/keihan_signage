@@ -5,10 +5,11 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from bus_fakes import bus_response, bus_state
 import bus_timetable
 
 
-from keihan_tracker.bus.schemes import BusDiagram, BusDiagramStop
+from keihan_tracker.bus.schemas import BusDiagram, BusDiagramStop
 
 
 DGMPL = "同志社香里:1:1:75120:17:12"
@@ -33,7 +34,11 @@ def clear_cache():
 
 
 def bus(dgmpl=DGMPL, destination="京阪香里園行"):
-    return SimpleNamespace(dgmpl=dgmpl, busstateprms=SimpleNamespace(destination=destination))
+    return SimpleNamespace(dgmpl=dgmpl, destination=destination)
+
+
+def client(fetch):
+    return SimpleNamespace(fetch_diagram=fetch)
 
 
 @pytest.mark.parametrize("schedule,expected", [
@@ -57,15 +62,11 @@ def test_same_trip_uses_library_api_and_reuses_schedule_until_next_day(monkeypat
         requests.append(dgmpl)
         return diagram(dgmpl=dgmpl)
 
-    monkeypatch.setattr(bus_timetable, "fetch_diagram", fetch)
-    for guid in ("first", "second"):
-        sample = bus()
-        sample.html = "HTML must be handled by keihan_tracker"
-        sample.busstateprms.guid = guid
-        assert asyncio.run(bus_timetable.terminal_times("同志社香里", [(1, sample)], NOW)) == [
+    for _ in ("first", "second"):
+        assert asyncio.run(bus_timetable.terminal_times(client(fetch), "同志社香里", [(1, bus())], NOW)) == [
             bus_timetable.TerminalArrival("17:31", False)]
     assert requests == [DGMPL]
-    asyncio.run(bus_timetable.terminal_times("同志社香里", [(1, bus())], NOW + datetime.timedelta(days=1)))
+    asyncio.run(bus_timetable.terminal_times(client(fetch), "同志社香里", [(1, bus())], NOW + datetime.timedelta(days=1)))
     assert requests == [DGMPL, DGMPL]
 
 
@@ -77,9 +78,8 @@ def test_missing_dgmpl_skips_fetch_and_other_platform_has_own_trip(monkeypatch):
         requests.append(dgmpl)
         return diagram(dgmpl=dgmpl, departure="17:19", destination="寝屋川市駅［東口］")
 
-    monkeypatch.setattr(bus_timetable, "fetch_diagram", fetch)
     samples = [(1, bus(None)), (2, bus(down, "寝屋川市駅行"))]
-    assert asyncio.run(bus_timetable.terminal_times("同志社香里", samples, NOW)) == [
+    assert asyncio.run(bus_timetable.terminal_times(client(fetch), "同志社香里", samples, NOW)) == [
         None, bus_timetable.TerminalArrival("17:31", False)]
     assert requests == [down]
 
@@ -96,12 +96,11 @@ def test_failed_optional_timetable_is_cached_briefly_then_retried(monkeypatch, e
             raise error
         return diagram()
 
-    monkeypatch.setattr(bus_timetable, "fetch_diagram", fetch)
     for _ in range(2):
-        assert asyncio.run(bus_timetable.terminal_times("同志社香里", [(1, bus())], NOW)) == [None]
+        assert asyncio.run(bus_timetable.terminal_times(client(fetch), "同志社香里", [(1, bus())], NOW)) == [None]
     assert len(requests) == 1
     clock[0] += 301
-    assert asyncio.run(bus_timetable.terminal_times("同志社香里", [(1, bus())], NOW)) == [
+    assert asyncio.run(bus_timetable.terminal_times(client(fetch), "同志社香里", [(1, bus())], NOW)) == [
         bus_timetable.TerminalArrival("17:31", False)]
 
 
@@ -115,11 +114,12 @@ def test_bus_terminal_failure_keeps_stop_predictions_and_marks_schedule_only_tim
     monkeypatch.setattr(main, "latest_bus_error", None)
 
     async def fetch(_name, platform):
-        prms = SimpleNamespace(route="[22]", destination="京阪香里園行", status="約3分後に到着",
-                               timetable="17:20 到着予定" if platform == 1 else "定刻 17:32")
-        return SimpleNamespace(body=SimpleNamespace(busstates=[SimpleNamespace(busstateprms=prms)]))
+        return bus_response(bus_state(timetable="17:20 到着予定" if platform == 1 else "定刻 17:32",
+                                      delay_text="定時運行中" if platform == 1 else None,
+                                      delay_minutes=0 if platform == 1 else None, scheduled_time="17:20"))
 
-    async def terminals(name, samples, now):
+    async def terminals(_client, name, samples, now):
+        assert _client is main.bus_client
         assert name == "テスト停留所"
         assert [platform for platform, _ in samples] == [1, 2]
         return [bus_timetable.TerminalArrival("17:39", True), None]
@@ -127,7 +127,7 @@ def test_bus_terminal_failure_keeps_stop_predictions_and_marks_schedule_only_tim
     async def stop(_seconds):
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(main, "get_khbus_info", fetch)
+    monkeypatch.setattr(main.bus_client, "get_info", fetch)
     monkeypatch.setattr(main.bus_timetable, "terminal_times", terminals)
     with monkeypatch.context() as loop_patch:
         loop_patch.setattr(main.asyncio, "sleep", stop)

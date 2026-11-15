@@ -39,7 +39,7 @@
     const choice=document.createElement('select');choice.id='demo-choice';choice.setAttribute('aria-label','デモ選択');
     for(const mode of ['replay','static','gallery']) {
         const group=document.createElement('optgroup');group.label={replay:'実際の記録',static:'架空の想定',gallery:'表示の見本'}[mode];
-        for(const item of scenario.catalog.filter(item=>item.mode===mode||(mode==='gallery'&&item.mode==='intro'))) {
+        for(const item of scenario.catalog.filter(item=>item.mode===mode||(mode==='gallery'&&['intro','chime','weather','playground'].includes(item.mode)))) {
             const option=document.createElement('option');option.value=item.id;option.textContent=item.title;option.disabled=!item.available;group.append(option);
         }
         choice.append(group);

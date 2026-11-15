@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&amp;family=Noto+Sans+JP:wght@400&amp;family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap">
+<title>{{ demo.title }} · 京阪サイネージ</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font:16px/1.6 system-ui,sans-serif}main{max-width:1320px;margin:auto;padding:28px 32px 40px}a{color:#D9D9D6}header nav{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}h1{font-size:28px;line-height:1.4;font-weight:500;margin:20px 0}.choice{display:flex;gap:10px;align-items:center;min-width:0}select,button{font:inherit;min-height:44px;padding:6px 12px;background:#202024;color:#F1F1EE;border:1px solid #4A4A50;border-radius:4px}select{min-width:0;max-width:100%}button:disabled{opacity:.5}button,input,select{accent-color:#F1F1EE}:focus-visible{outline:2px solid #F1F1EE;outline-offset:3px}@media(max-width:680px){main{padding:20px 16px 32px}.choice{width:100%}.choice select{flex:1}h1{font-size:24px}}
+#atlas-intro{display:grid;gap:12px}
+#atlas-intro button[data-action=play]{background:#F1F1EE;color:#151517}
+#atlas-intro input{width:100%;height:36px;margin:0}
+#atlas-intro [role=status],#atlas-intro .intro-readout,#atlas-intro .intro-credit{font-size:14px;color:#A1A1A6}
+#atlas-intro [role=alert]{color:#F3AAAA}
+#atlas-intro .intro-stage{position:relative;isolation:isolate;aspect-ratio:16/9;background:#0B0B0C;overflow:hidden;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif}
+#atlas-intro .intro-board{position:absolute;z-index:0;left:0;top:0;width:1920px;height:1080px;border:0;transform-origin:0 0;pointer-events:none;visibility:hidden}
+#atlas-intro .intro-map{position:absolute;z-index:1;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;pointer-events:none}
+#atlas-intro .intro-title{position:absolute;z-index:2;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;pointer-events:none;white-space:nowrap}
+#atlas-intro .intro-group{position:absolute;left:120px;top:372px;font-size:20px;font-weight:500;line-height:1;color:#7C7C82}
+#atlas-intro .intro-line1{position:absolute;left:120px;top:424px;font-size:36px;font-weight:400;letter-spacing:.06em;line-height:1;color:#A1A1A6}
+#atlas-intro .intro-line2{position:absolute;left:117px;top:488px;font-size:66px;font-weight:300;letter-spacing:.02em;line-height:1;color:#F1F1EE}
+#atlas-intro .intro-ch{display:inline-block;will-change:transform,opacity}
+#atlas-intro .intro-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#atlas-intro .intro-scrub{display:grid;gap:4px;min-width:0}
+#atlas-intro .intro-readout{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+#atlas-intro .intro-credit{margin:0}
+</style>
+</head>
+<body><main>
+<header><nav aria-label="デモの選択"><a id="intro-back" href="/demo">← デモ一覧</a><label class="choice">デモ<select id="intro-demo" aria-label="デモ選択">{% for item in demos %}<option value="{{ item.id }}" {% if item.id == demo.id %}selected{% endif %} {% if not item.available %}disabled{% endif %}>{{ item.title }}</option>{% endfor %}</select></label></nav><h1>{{ demo.title }}</h1></header>
+
+<div id="atlas-intro">
+  <div class="intro-stage" role="img" aria-label="起動イントロ「測量」。黒い画面を2本の細線が滑ってきて同志社香里の上で交わり、照準が締まる。そこから広がる波に沿って、測点が灯り、等高線・道路・建物が線だけの立体で立ち上がり、視点は真上から引きながら斜めに寝ていく。京阪本線が光り、準急が香里園に止まると、真上からの視点に回り込みながら駅に寄り、線路が見出しの下線になり発車案内が組み上がります。"><canvas class="intro-map" width="1920" height="1080" aria-hidden="true"></canvas><div class="intro-title" aria-hidden="true"><div class="intro-group">探究1A-2班</div><div class="intro-line1"></div><div class="intro-line2"></div></div></div>
+  <div class="intro-controls">
+    <button type="button" data-action="play" disabled>最初から再生</button>
+    <button type="button" data-action="restart" disabled>やり直す</button>
+    <button type="button" data-action="transition" disabled>寄るところから</button>
+    <button type="button" data-action="previous" aria-label="1フレーム戻る" disabled>−1 F</button>
+    <button type="button" data-action="next" aria-label="1フレーム進む" disabled>＋1 F</button>
+    <span role="status" aria-live="polite">地図を準備中</span>
+  </div>
+  <div class="intro-scrub">
+    <div class="intro-readout"><label for="atlas-intro-frame">再生位置 <output data-time aria-live="off">0.00 / 0.00 秒</output></label><span data-phase>座標</span><output data-frame aria-live="off">0 / 0 F · 60 fps</output></div>
+    <input id="atlas-intro-frame" type="range" min="0" max="0" step="1" value="0" disabled>
+  </div>
+  <p class="intro-credit">地図データ © OpenStreetMap contributors（ODbL）／標高 国土地理院 基盤地図情報数値標高モデル（5mメッシュ）を加工</p>
+</div>
+</main><script>
+const base=location.pathname.replace(/\/$/,''),catalog=base.slice(0,base.lastIndexOf('/'));
+document.getElementById('intro-back').href=catalog;
+document.getElementById('intro-demo').addEventListener('change',event=>location.assign(catalog+'/'+event.target.value));
+const script=document.createElement('script');script.src=base+'/player.js';
+script.onerror=()=>{const status=document.querySelector('#atlas-intro [role=status]');status.textContent='イントロを読み込めませんでした。再読み込みしてください。';status.setAttribute('role','alert');};
+document.body.append(script);
+</script></body></html>

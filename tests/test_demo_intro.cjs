@@ -10,7 +10,7 @@ const fs=require('fs'),os=require('os'),path=require('path');
     page.on('request',request=>{if(/\/(api|transit\/api)\//.test(new URL(request.url()).pathname))live.push(request.url());});
     await page.clock.install();
     await page.goto(root+'/');
-    await page.getByRole('link',{name:/起動イントロ/}).click();
+    await page.locator('a[data-demo-id="startup-intro"]').click();
     await page.waitForURL(root+'/startup-intro');
     await page.waitForFunction(()=>document.getElementById('tankyu-intro').intro?.ready);
     assert.equal(await page.getByRole('combobox',{name:'デモ選択',exact:true}).inputValue(),'startup-intro');
@@ -19,29 +19,40 @@ const fs=require('fs'),os=require('os'),path=require('path');
     async function seek(value) {
         await slider.evaluate((input,value)=>{input.value=String(value);input.dispatchEvent(new Event('input',{bubbles:true}));},value);
     }
-    const glow=[];
-    for(const value of [135,183,237]) {
-        await seek(value);
-        glow.push(await page.locator('.intro-source .intro-glow').evaluate(node=>Number(node.style.opacity)));
-        assert.equal(await page.locator('.intro-source .intro-text').evaluate(node=>node.style.opacity),'1');
-        await page.screenshot({path:out+`/intro-${value}.png`});
-    }
-    assert.ok(glow[0]<.05&&glow[0]<glow[1]&&glow[1]<glow[2]&&glow[2]===.75);
     const board=page.frameLocator('.intro-board');
-    await seek(299);
+    const chars=()=>page.locator('.intro-line2 .intro-ch').evaluateAll(nodes=>nodes.map(node=>Number(node.style.opacity)));
+    const heading=page.locator('.intro-group');
+    await seek(60);
     assert.equal(await board.locator('#station-name').evaluate(node=>getComputedStyle(node).opacity),'0');
-    await seek(315);
-    assert.ok(Number(await board.locator('#station-name').evaluate(node=>getComputedStyle(node).opacity))>.5);
-    assert.equal(await board.locator('#normal-up-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
+    assert.ok((await chars()).every(value=>value===0));
+    await seek(162);
+    const shown=await chars();
+    assert.ok(shown[0]>.9&&shown.at(-1)<.1,'the express light reveals the title from the left');
+    await seek(204);
+    assert.ok((await chars()).every(value=>value>.9));
+    assert.ok(Number(await heading.evaluate(node=>node.style.opacity))>.9);
+    await page.screenshot({path:out+'/intro-204.png'});
+    await seek(282);
+    assert.ok((await chars()).every(value=>value===1));
+    await seek(372);
+    assert.equal(await heading.evaluate(node=>node.style.opacity),'0');
+    assert.ok((await chars()).every(value=>value===0));
     await seek(400);
+    const name=Number(await board.locator('#station-name').evaluate(node=>getComputedStyle(node).opacity));
+    assert.ok(name>.9);
+    assert.equal(await board.locator('#normal-up-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
+    await seek(450);
+    const head=await board.locator('#normal-up > :first-child').evaluate(node=>getComputedStyle(node).clipPath);
+    assert.notEqual(head,'none');
+    assert.equal(await board.locator('#normal-delay-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
+    await seek(448);
     const phase=await board.locator('#normal-up-list > div').first().evaluate(node=>({
         row:Number(getComputedStyle(node).opacity),
-        time:Number(getComputedStyle(node.querySelector('[data-field="time"]')).opacity),
-        destination:Number(getComputedStyle(node.querySelector('[data-field="destination"]')).opacity),
-        remaining:Number(getComputedStyle(node.querySelector('[data-field="remaining"]')).opacity)
+        edge:Number(getComputedStyle(node.querySelector('.demo-intro-edge')).opacity),
+        kind:getComputedStyle(node.querySelector('.train-kind')).filter
     }));
-    assert.ok(phase.row>=phase.time&&phase.time>phase.destination&&phase.destination>phase.remaining,JSON.stringify(phase));
-    assert.equal(await board.locator('#normal-delay-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
+    assert.ok(phase.row>.5&&phase.edge>0&&phase.kind!=='none'&&phase.kind!=='brightness(1) saturate(1)',JSON.stringify(phase));
+    await seek(540);
     await seek(183);
     await page.getByRole('button',{name:'1フレーム進む',exact:true}).click();
     assert.equal(await slider.inputValue(),'184');
@@ -54,21 +65,22 @@ const fs=require('fs'),os=require('os'),path=require('path');
     const stopped=await slider.inputValue();await page.clock.runFor(1000);assert.equal(await slider.inputValue(),stopped);
     await page.getByRole('button',{name:'再生',exact:true}).click();
     await page.clock.runFor(9000);
-    assert.equal(await slider.inputValue(),'541');
-    assert.equal(await page.locator('.intro-pixels').evaluate(node=>node.style.opacity),'0');
+    assert.equal(await slider.inputValue(),'593');
+    assert.ok((await chars()).every(value=>value===0));
     const completed=await board.locator('#normal-up-list').textContent();
     assert.equal(await board.locator('#normal-up-list > div').count(),6);
     assert.equal(await board.locator('#demo-dock').isVisible(),false);
-    assert.ok(await board.locator('.demo-assembly-guide').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).opacity==='0')));
-    await page.clock.runFor(1000);assert.equal(await slider.inputValue(),'541');
-    await seek(299);await seek(541);assert.equal(await board.locator('#normal-up-list').textContent(),completed);
-    await page.getByRole('button',{name:'つなぎから',exact:true}).click();
-    assert.ok(Number(await slider.inputValue())>=276&&Number(await slider.inputValue())<300);
+    assert.ok(await board.locator('.demo-intro-edge').evaluateAll(nodes=>nodes.length>0&&nodes.every(node=>getComputedStyle(node).opacity==='0')));
+    assert.ok(await board.locator('#normal-up-list > div, #normal-down-list > div, #normal-bus-list > div, #normal-delay-list > div').evaluateAll(nodes=>nodes.every(node=>getComputedStyle(node).opacity==='1'&&/^inset\(0px( 0%)?( 0px){0,2}\)$/.test(getComputedStyle(node).clipPath))));
+    await page.clock.runFor(1000);assert.equal(await slider.inputValue(),'593');
+    await seek(299);await seek(593);assert.equal(await board.locator('#normal-up-list').textContent(),completed);
+    await page.getByRole('button',{name:'寄るところから',exact:true}).click();
+    assert.ok(Number(await slider.inputValue())>=357&&Number(await slider.inputValue())<380);
     await page.clock.runFor(5000);
-    assert.equal(await slider.inputValue(),'541');
+    assert.equal(await slider.inputValue(),'593');
     await page.getByRole('button',{name:'再生',exact:true}).click();await page.clock.runFor(500);
     assert.ok(Number(await slider.inputValue())<50);
-    await seek(200);
+    await seek(282);
     for(const [width,height] of [[1920,1080],[960,600],[375,812],[320,700]]) {
         await page.setViewportSize({width,height});
         await page.clock.runFor(50);
@@ -92,5 +104,5 @@ const fs=require('fs'),os=require('os'),path=require('path');
     await page.unroute(root+'/normal/data');await page.getByRole('button',{name:'再読み込み',exact:true}).click();
     await page.waitForFunction(()=>document.getElementById('tankyu-intro').intro?.ready);
     assert.deepEqual(errors,[]);assert.deepEqual(live,[]);
-    await browser.close();console.log('Intro demo: glow, seamless handoff, planned order within rows/columns, complete board, seek/replay, 320–1920px, navigation, reduced motion and no live API passed');
+    await browser.close();console.log('Intro demo: line, title reveal, stop at the station, camera landing on the header, planned order of columns/rows, complete board, seek/replay, 320–1920px, navigation, reduced motion and no live API passed');
 })().catch(error=>{console.error(error);process.exit(1)});

@@ -4,8 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
-from keihan_tracker import ActiveTrainData, TrainData
-from keihan_tracker.keihan_train.schemes import TrainType
+from keihan_tracker import ActiveTrainData, TrainData, TrainType
 
 import main
 
@@ -114,8 +113,8 @@ def active(row, direction='up', delay=0, staying=0, at_start=False):
     train.position_since = NOW
     train.train_type = TrainType.LOCAL
     train.destination = None
-    train.is_stopping = False
-    train.next_stop_station = None
+    train.stopped_at = None
+    train.current_or_next_stop = None
     train.train_number = str(row)
     train.cars, train.train_formation, train.has_premiumcar = 7, None, False
     train.stop_stations = []
@@ -135,9 +134,9 @@ def test_minimum_arrival_keeps_unknown_and_excludes_current_station(monkeypatch,
     monkeypatch.setattr(datetime, 'datetime', Clock)
     here, previous = station(18, '香里園'), station(19, '光善寺')
     train = active(70, direction='down', delay=delay)
-    train.next_station = here if at_station else previous
-    train.next_stop_station = here if at_station else previous
-    train.is_stopping = at_station
+    train.position = SimpleNamespace(station=here if at_station else None, ahead=None if at_station else previous)
+    train.current_or_next_stop = here if at_station else previous
+    train.stopped_at = here if at_station else None
     arrival = NOW + datetime.timedelta(seconds=seconds, minutes=-delay)
     train.stop_stations = [stop(previous, arrival - datetime.timedelta(minutes=3)), stop(here, arrival)]
     here.upcoming_trains = [(train, stop(here, arrival))]
@@ -153,10 +152,10 @@ def test_line_api_counts_next_and_stale(monkeypatch):
     stations[18].station_name.ja = '香里園'
     stations[17].station_name.ja = '寝屋川市'
     a = active(75, delay=8, staying=16)  # 17と18の間、京都方面
-    a.next_station = here
+    a.position = SimpleNamespace(station=None, ahead=here)
     a.stop_stations = [stop(sub, now), stop(here, now + datetime.timedelta(minutes=5))]
     b = active(70, 'down', delay=6, staying=1)
-    b.next_station = stations[19]
+    b.position = SimpleNamespace(station=None, ahead=stations[19])
     b.stop_stations = [stop(stations[19], now), stop(here, now + datetime.timedelta(minutes=8))]
     kyoto = active(40, staying=18)
     excluded = active(118)
@@ -267,8 +266,8 @@ def test_lower_bound_preserves_official_delay_and_hides_arrival_forecast(monkeyp
     now = datetime.datetime.now(main.JST)
     here, previous = station(18, '香里園'), station(17, '寝屋川市')
     train = active(75, delay=120)
-    train.next_station = here
-    train.next_stop_station = here
+    train.position = SimpleNamespace(station=None, ahead=here)
+    train.current_or_next_stop = here
     train.estimated_delay_minutes = estimate
     train.stop_stations = [stop(previous, now), stop(here, now + datetime.timedelta(minutes=1))]
     here.upcoming_trains = [(train, train.stop_stations[-1])]
@@ -292,7 +291,7 @@ def test_lower_bound_preserves_official_delay_and_hides_arrival_forecast(monkeyp
 def test_unavailable_lower_bound_falls_back_to_official_value(monkeypatch):
     from unittest.mock import PropertyMock
     train = active(75, delay=120)
-    train.next_stop_station = station(18, '香里園')
+    train.current_or_next_stop = station(18, '香里園')
     monkeypatch.setattr(type(train), 'estimated_delay_minutes', PropertyMock(side_effect=ValueError('missing schedule')), raising=False)
     assert main._estimated_delay_minutes(train) is None
     assert train.delay_minutes == 120

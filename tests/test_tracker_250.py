@@ -6,9 +6,9 @@ from unittest.mock import Mock
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from keihan_tracker import ActiveTrainData, KeihanAPIError, TrainData
-from keihan_tracker.keihan_train.schemes import TrainType
+from keihan_tracker import ActiveTrainData, KeihanAPIError, TrainData, TrainType
 
+from bus_fakes import bus_response
 import main
 
 
@@ -22,7 +22,7 @@ def station_api(monkeypatch):
         "buses": {"stop_name": "テスト停留所", "stop_numbers": [1, 2]},
         "intervals": {"bus_seconds": 60},
     })
-    station = SimpleNamespace(station_name=SimpleNamespace(ja="香里園"), upcoming_trains=[])
+    station = SimpleNamespace(station_number=18, station_name=SimpleNamespace(ja="香里園"), upcoming_trains=[])
     monkeypatch.setattr(main, "tracker", SimpleNamespace(
         stations={18: station}, position_created_at=datetime.datetime.now(main.JST), active_trains={}))
     monkeypatch.setattr(main, "_last_pos_success", datetime.datetime.now(main.JST))
@@ -40,9 +40,9 @@ def test_unknown_destination_and_three_state_stopping(station_api, stopping):
     train.destination = None
     train.delay_minutes = 0
     train.direction = "up"
-    train.is_stopping = stopping
-    train.next_station = station
-    train.next_stop_station = station
+    train.stopped_at = station if stopping is True else None
+    train.position = SimpleNamespace(station=station, ahead=None)
+    train.current_or_next_stop = station
     train.train_number = "0500"
     train.cars = 7
     train.train_formation = None
@@ -61,10 +61,14 @@ def test_unknown_destination_and_three_state_stopping(station_api, stopping):
     assert response.status_code == 200
     data = response.json()
     assert data["error"] is None
-    row = data["up_trains"][0]
-    assert row["destination"] == "不明"
-    assert row["is_this_station"] is (stopping is True)
-    assert row["status"] == ("当駅停車中" if stopping is True else "")
+    if stopping is True:
+        assert data["up_trains"] == []  # 通常画面では当駅停車中の列車を除く
+    else:
+        assert data["up_trains"][0]["destination"] == "不明"
+    (row,) = main._ordered_trains(station, 0, 6)[0]
+    assert row.destination == "不明"
+    assert row.is_this_station is (stopping is True)
+    assert row.status == ("当駅停車中" if stopping is True else "")
 
 
 @pytest.mark.parametrize("stopping", [True, False])
@@ -75,9 +79,9 @@ def test_overdue_train_kept_only_while_stopping_here(station_api, stopping):
     train.destination = None
     train.delay_minutes = 0
     train.direction = "down"
-    train.is_stopping = stopping
-    train.next_station = station
-    train.next_stop_station = station
+    train.stopped_at = station if stopping is True else None
+    train.position = SimpleNamespace(station=station, ahead=None)
+    train.current_or_next_stop = station
     train.train_number = "1503"
     train.cars = 7
     train.train_formation = None
@@ -93,11 +97,13 @@ def test_overdue_train_kept_only_while_stopping_here(station_api, stopping):
     )]
 
     rows = client.get("/api/trains").json()["down_trains"]
+    assert rows == []  # 通常画面では当駅停車中も、発車済みの列車も表示しない
+    internal = main._ordered_trains(station, 0, 6)[1]
     if stopping:
-        assert rows[0]["status"] == "当駅停車中"
-        assert rows[0]["is_this_station"] is True
+        assert internal[0].status == "当駅停車中"
+        assert internal[0].is_this_station is True
     else:
-        assert rows == []
+        assert internal == []
 
 
 def _active_train(delay, growing):
@@ -106,9 +112,9 @@ def _active_train(delay, growing):
     train.destination = None
     train.delay_minutes = delay
     train.direction = "up"
-    train.is_stopping = False
-    train.next_station = None
-    train.next_stop_station = None
+    train.stopped_at = None
+    train.position = SimpleNamespace(station=None, ahead=None)
+    train.current_or_next_stop = None
     train.train_number = "0500"
     train.cars = 7
     train.train_formation = None
@@ -191,7 +197,7 @@ def test_estimate_hidden_while_delay_grows(station_api, delay, growing, unreliab
 
     leading, following = client.get("/api/trains").json()["up_trains"]
     if delay < 120:
-        active.is_delay_growing.assert_called_once_with(ratio=0.7)
+        active.is_delay_growing.assert_called_with(ratio=0.7)
     assert leading["estimate_unreliable"] is unreliable
     assert leading["time"] == (now + datetime.timedelta(minutes=5)).strftime("%H:%M")
     assert following["time"] == (now + datetime.timedelta(minutes=25)).strftime("%H:%M")
@@ -274,9 +280,9 @@ def test_bus_failure_keeps_previous_display(station_api, monkeypatch, error):
     async def fetch(_name, stop):
         if stop == 2:
             raise error
-        return SimpleNamespace(body=SimpleNamespace(busstates=[]))
+        return bus_response()
 
-    monkeypatch.setattr(main, "get_khbus_info", fetch)
+    monkeypatch.setattr(main.bus_client, "get_info", fetch)
     with monkeypatch.context() as loop_patch:
         loop_patch.setattr(main.asyncio, "sleep", _stop_after_one_cycle)
         with pytest.raises(asyncio.CancelledError):
@@ -294,9 +300,9 @@ def test_successful_empty_bus_response_clears_previous_error(station_api, monkey
     monkeypatch.setattr(main, "latest_bus_error", "前回のエラー")
 
     async def fetch(_name, _stop):
-        return SimpleNamespace(body=SimpleNamespace(busstates=[]))
+        return bus_response()
 
-    monkeypatch.setattr(main, "get_khbus_info", fetch)
+    monkeypatch.setattr(main.bus_client, "get_info", fetch)
     with monkeypatch.context() as loop_patch:
         loop_patch.setattr(main.asyncio, "sleep", _stop_after_one_cycle)
         with pytest.raises(asyncio.CancelledError):

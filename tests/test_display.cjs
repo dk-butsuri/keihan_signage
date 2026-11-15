@@ -20,8 +20,10 @@ async function assertBusFallbacks(page) {
         busData={buses:[
             {...original.buses[0],terminal_arrival_time:null},
             {...original.buses[1],stop_arrival_is_scheduled:true},
-            {...original.buses[0],status:'運休'},
+            {...original.buses[0],status:'まもなく到着',arrival_time:'',terminal_arrival_time:null},
             {...original.buses[0],terminal_arrival_is_estimated:true},
+            {...original.buses[0],status:'約1時間18分後に到着'},
+            {...original.buses[0],status:'未確認の表記 <test>'},
         ]};
         renderBuses();window.savedBusData=original;
     });
@@ -30,8 +32,12 @@ async function assertBusFallbacks(page) {
     assert.equal(await cards.nth(1).locator('[data-field="status"]').textContent(),'定刻');
     assert.equal(await cards.nth(2).locator('[data-field="arrival"]').textContent(),'—');
     assert.equal(await cards.nth(2).locator('[data-field="terminal-time"]').textContent(),'');
-    assert.equal(await cards.nth(2).locator('[data-field="status"]').textContent(),'運休');
+    assert.equal(await cards.nth(2).locator('[data-field="status"]').textContent(),'まもなく');
     assert.match(await cards.nth(3).locator('[data-field="terminal-time"]').textContent(),/着（推定）$/);
+    assert.equal(await cards.nth(4).locator('[data-field="status"]').textContent(),'約78分後');
+    assert.equal(await cards.nth(5).locator('[data-field="status"]').textContent(),'未確認の表記 <test>');
+    assert.equal(await cards.nth(5).locator('[data-field="status"] test').count(),0);
+    assert.match(await cards.nth(5).locator('[data-field="arrival"]').textContent(),/発$/);
     await page.evaluate(()=>{busData=window.savedBusData;delete window.savedBusData;renderBuses();});
 }
 async function assertStableClock(page) {

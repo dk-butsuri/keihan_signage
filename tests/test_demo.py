@@ -62,7 +62,7 @@ def test_catalog_and_unknown_scenarios(recording):
         response = client.get(path)
         assert response.status_code == 200
         assert 'デモを選ぶ' in response.text
-        assert response.text.count('data-demo-id=') == 8
+        assert response.text.count('data-demo-id=') == len(demo.SCENARIOS)
         assert '架空の想定' in response.text and '実記録' in response.text
     for path in ['/demo/missing', '/demo/missing/data', '/demo/missing/player.js', '/demo/config.yml']:
         assert client.get(path).status_code == 404
@@ -80,7 +80,6 @@ def test_intro_needs_no_recording_or_live_state(path, monkeypatch, tmp_path):
     page = client.get(path)
     assert page.status_code == 200 and 'tankyu-intro' in page.text
     assert page.headers['cache-control'] == 'no-store'
-    assert 'data:font/woff2;base64,' in page.text
     assert client.head(path).status_code == 200
     assert client.get('/demo/startup-intro/player.js').status_code == 200
     assert client.head('/demo/startup-intro/player.js').status_code == 200
@@ -88,6 +87,38 @@ def test_intro_needs_no_recording_or_live_state(path, monkeypatch, tmp_path):
     assert client.get('/demo/normal/assembly.js').status_code == 404
     assert client.get('/demo/startup-intro/data').status_code == 404
     assert main._cfg is config and main.tracker is tracker and vars(main._suspension) == state
+    client.close()
+
+
+@pytest.mark.parametrize('path', ['/demo/hourly-honsen', '/demo/hourly-honsen/'])
+def test_honsen_chime_demo_needs_no_recording_or_live_state(path, monkeypatch, tmp_path):
+    monkeypatch.setattr(demo, 'DATA_FILE', tmp_path / 'missing.json')
+    config = {'features': {'trains': False}}
+    monkeypatch.setattr(main, '_cfg', config)
+    tracker, state = main.tracker, vars(main._suspension).copy()
+    client = TestClient(main.app)
+    page = client.get(path)
+    assert page.status_code == 200 and 'chime-demo' in page.text
+    assert page.headers['cache-control'] == 'no-store'
+    assert client.head(path).status_code == 200
+    player = client.get('/demo/hourly-honsen/player.js')
+    assert player.status_code == 200 and '.chime-seconds' in player.text
+    assert client.get('/demo/hourly-honsen/data').status_code == 404
+    assert client.get('/demo/hourly-honsen/assembly.js').status_code == 404
+    assert 'hourly-honsen' in client.get('/demo').text
+    client.close()
+    assert main._cfg is config and main.tracker is tracker and vars(main._suspension) == state
+
+
+def test_hourly_chime_scripts_are_served_to_the_screen():
+    client = TestClient(main.app)
+    chime = client.get('/assets/chime.js')
+    assert chime.status_code == 200 and 'startHourlyChime' in chime.text
+    assert chime.headers['content-type'].startswith('text/javascript')
+    assert 'createChime' in client.get('/assets/chime-core.js').text
+    assert 'createChime' in client.get('/demo/hourly-honsen/chime-core.js').text
+    assert client.get('/demo/normal/chime-core.js').status_code == 404
+    assert client.get('/assets/demo-chime.js').status_code == 404
     client.close()
 
 
@@ -118,7 +149,7 @@ def test_pattern_gallery_is_complete_and_independent_of_live_state(path, monkeyp
     client.close()
 
 
-@pytest.mark.parametrize('scenario_id', ['normal', 'jr-loop', 'severe-weather', 'all-stopped'])
+@pytest.mark.parametrize('scenario_id', ['normal', 'bus-delay', 'jr-loop', 'severe-weather', 'all-stopped'])
 def test_static_scenarios_have_consistent_display_data_and_no_timeline(scenario_id, monkeypatch):
     monkeypatch.setattr(main, '_cfg', {'features': {'trains': False}})
     tracker, state = main.tracker, vars(main._suspension).copy()
@@ -139,7 +170,7 @@ def test_static_scenarios_have_consistent_display_data_and_no_timeline(scenario_
         for marker, train in zip(incoming, data['line']['directions'][direction]['next']):
             assert all(marker[key] == train[key] for key in ('kind', 'delay', 'stopped_minutes'))
     assert data['line']['stopped'] == sum(t['stopped_minutes'] is not None for t in data['line']['trains'])
-    if scenario_id == 'normal':
+    if scenario_id in ('normal', 'bus-delay'):
         assert not data['line']['suspended'] and all(g['mark'] == '○' for g in data['delays']['groups'])
     elif scenario_id == 'jr-loop':
         assert not data['line']['suspended']
@@ -205,3 +236,19 @@ def test_weather_demo_uses_the_live_rules_without_live_state(monkeypatch):
     assert client.get('/demo/weather-cards/weather', params={'state': '{"warnings":[{"element":"x"}]}'}).status_code == 400
     assert client.get('/demo/normal/weather').status_code == 404
     assert client.get('/demo/weather-cards/data').status_code == 404
+
+
+def test_bus_delay_demo_preserves_unknown_and_arrived_states():
+    client = TestClient(main.app)
+    response = client.get('/demo/bus-delay/data')
+    client.close()
+    assert response.status_code == 200
+    buses = response.json()['buses']['buses']
+    assert [bus['delay_minutes'] for bus in buses] == [0, 5, 75, None, None, None]
+    assert buses[1]['scheduled_time'] == '15:03'
+    assert buses[1]['arrival_time'] == '15:08 到着予定'
+    assert buses[1]['terminal_arrival_time'] == '15:15'
+    assert buses[3]['delay_text'] is None and buses[3]['stop_arrival_is_scheduled']
+    assert buses[4]['delay_text'] == '到着済'
+    assert buses[3]['status'] == '約24分後に到着'
+    assert buses[5]['status'] == 'まもなく到着'
