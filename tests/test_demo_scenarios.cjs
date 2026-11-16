@@ -12,7 +12,7 @@ const os=require('os');
     page.on('request',r=>{if(/\/(api|transit\/api)\//.test(new URL(r.url()).pathname))live.push(r.url());});
     await page.clock.install();
     await page.goto(root+'/');
-    assert.equal(await page.locator('[data-demo-id]').count(),14);
+    assert.equal(await page.locator('[data-demo-id]').count(),16);
     assert.equal(await page.locator('a.card.recorded').count(),1);
     await page.evaluate(()=>document.fonts.ready);
     assert.equal(await page.locator('[data-demo-id="bus-delay"]').count(),1);

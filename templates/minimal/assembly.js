@@ -1,4 +1,5 @@
-export function createScreenAssembly(doc) {
+/* headerRule が false のときは、見出しの下線を引かずに最初から出しておく（「測量」の画面から線路が下線になって渡ってくるとき）。 */
+export function createScreenAssembly(doc,{headerRule=true}={}) {
     const screen=doc.getElementById('screen'),animations=[],helpers=[],styles=[];
     let destroyed=false;
     function changeStyle(element,name,value) {
@@ -43,7 +44,7 @@ export function createScreenAssembly(doc) {
         lift(doc.getElementById('station-name'),0,420,8);
         doc.querySelectorAll('#clock-time > span,#clock-seconds > span').forEach((digit,index)=>lift(digit,55+index*27,380,9));
         enter(doc.getElementById('clock-date'),210,300,0,3);
-        rule(header,380,500);
+        if(headerRule)rule(header,380,500);
         const columns=['normal-up','normal-down','normal-buses','normal-delays'].map(id=>doc.getElementById(id)).filter(visible);
         const screenRect=screen.getBoundingClientRect(),headRect=header.getBoundingClientRect(),bottom=doc.getElementById('normal').getBoundingClientRect().bottom;
         const scale=screenRect.width/parseFloat(doc.defaultView.getComputedStyle(screen).width);

@@ -161,11 +161,71 @@ async def atlas_map(scenario_id: str):
     return FileResponse(ATLAS_MAP_FILE, media_type="application/json", headers=_HEADERS)
 
 
+THUMBS = Path(__file__).parent / "docs/demo-thumbs"
+
+
+@router.api_route("/demo/{scenario_id}/thumb.jpg", methods=["GET", "HEAD"])
+async def thumbnail(scenario_id: str):
+    # 一覧のサムネイル。tools/build_demo_thumbs.cjs で撮り直す
+    path = THUMBS / (_scenario(scenario_id)["id"] + ".jpg")
+    if not path.is_file():
+        raise HTTPException(404, "サムネイルがありません")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
 @router.api_route("/demo/{scenario_id}/assembly.js", methods=["GET", "HEAD"])
 async def assembly_player(scenario_id: str):
     if _scenario(scenario_id)["mode"] != "intro":
         raise HTTPException(404, "このデモに組み上げ演出はありません")
     return FileResponse(ASSEMBLY_PLAYER_FILE, media_type="text/javascript", headers=_HEADERS)
+
+
+# サイネージの時計の画面。デモの時計「測量」を、見出しや操作の部品を除いて画面いっぱいに出す。
+# 端末は controller の /clock/ から開く（controller が transit の /clock/ に中継する）。
+CLOCK_SCENARIO = "clock-atlas"
+
+
+@router.api_route("/clock", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@router.api_route("/clock/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def signage_clock(request: Request):
+    return templates.TemplateResponse(request, "demo-clock-atlas.html",
+                                      {"demo": _scenario(CLOCK_SCENARIO), "demos": [], "signage": True}, headers=_HEADERS)
+
+
+_ATLAS_FILES = {"player.js": PLAYER_FILE.with_name("demo-clock-atlas.js"),
+                "weather.js": PLAYER_FILE.with_name("weather.js"), "map.json": ATLAS_MAP_FILE}
+
+
+def _atlas_file(name: str):
+    if name not in _ATLAS_FILES:
+        raise HTTPException(404, "Not Found")
+    return FileResponse(_ATLAS_FILES[name], headers=_HEADERS)
+
+
+@router.api_route("/clock/{name}", methods=["GET", "HEAD"])
+async def signage_clock_file(name: str):
+    return _atlas_file(name)
+
+
+# 列車とバスのどちらか片方だけを出すときの画面。時計「測量」の地図を背景に、発車案内を主役にする。
+# controller は、片方だけがオンのとき交通情報の代わりに /transit/board/bus/ か /transit/board/train/ を出す。
+BOARD_SCENARIOS = {"bus": "bus-atlas", "train": "train-atlas"}
+
+
+@router.api_route("/board/{kind}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@router.api_route("/board/{kind}/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def signage_board(kind: str, request: Request):
+    if kind not in BOARD_SCENARIOS:
+        raise HTTPException(404, "Not Found")
+    return templates.TemplateResponse(request, "demo-clock-atlas.html",
+                                      {"demo": _scenario(BOARD_SCENARIOS[kind]), "demos": [], "signage": True}, headers=_HEADERS)
+
+
+@router.api_route("/board/{kind}/{name}", methods=["GET", "HEAD"])
+async def signage_board_file(kind: str, name: str):
+    if kind not in BOARD_SCENARIOS:
+        raise HTTPException(404, "Not Found")
+    return _atlas_file(name)
 
 
 @router.api_route("/demo/{scenario_id}", methods=["GET", "HEAD"], response_class=HTMLResponse)

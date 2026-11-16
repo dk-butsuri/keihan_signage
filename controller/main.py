@@ -8,6 +8,11 @@ from typing import AsyncGenerator, Optional
 
 import httpx
 import yaml
+
+try:
+    from version import VersionBook, code_hash
+except ImportError:  # テストでは controller パッケージとして読み込む
+    from controller.version import VersionBook, code_hash
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -19,6 +24,8 @@ CLOCK_URL = os.getenv("CLOCK_URL", "http://clock:80")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 SCHEDULE_FILE = DATA_DIR / "schedule.json"
+# バージョン（YYMMDD-N）の記録。controller と transit のプログラムが変わるたびに進む（version.py）
+versions = VersionBook(DATA_DIR / "version.json")
 CONFIG_FILE = Path(os.getenv("CONFIG_FILE", "/app/config.yml"))
 
 VALID_MODES = {"transit", "clock"}
@@ -56,15 +63,81 @@ def save_schedule(data: dict) -> None:
     SCHEDULE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _transit_features() -> tuple[bool, bool]:
+    """列車とバスがそれぞれオンか。管理画面と同じく、書かれていない項目はオンとみなす"""
+    try:
+        features = (yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8")) or {}).get("features") or {}
+    except Exception:
+        return True, True
+    return features.get("trains", True) is not False, features.get("buses", True) is not False
+
+
+def _transit_disabled() -> bool:
+    """列車とバスがどちらもオフなら、交通情報の画面に出すものがないので時計にする"""
+    return _transit_features() == (False, False)
+
+
+# 京阪が見合わせ時の画面（transit の /api/status の trains.suspended）になっているか。schedule_loop が30秒ごとに取り直す
+keihan_suspended = False
+
+
+async def _refresh_suspension() -> bool:
+    """見合わせ時の画面かどうかを transit から取り直し、変わったら True を返す。取れないときは前の状態のまま。
+    ついでに transit のプログラムのハッシュを読み、変わっていればバージョンを進めて端末に知らせる"""
+    global keihan_suspended
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{TRANSIT_URL}/api/status")
+        status = response.json()
+        suspended = bool(status["trains"]["suspended"])
+    except Exception:
+        return False
+    build = versions.build
+    try:
+        versions.note("transit", status.get("code_hash") or "")
+    except OSError:
+        pass
+    changed = suspended != keihan_suspended
+    keihan_suspended = suspended
+    if versions.build != build:
+        await broadcast_status()
+    return changed
+
+
+def _transit_view() -> str:
+    """交通情報の時間帯に出す画面。
+    両方オンならいつもの画面（full）。片方だけオンなら、その発車案内を主役にした画面（transit の /board/...）。
+    ただし京阪が見合わせ時の画面になるときは、片方だけでも、その専用の画面を持ついつもの画面にする"""
+    trains, buses = _transit_features()
+    if keihan_suspended:
+        return "full"
+    if trains and not buses:
+        return "train"
+    if buses and not trains:
+        return "bus"
+    return "full"
+
+
 def _mode_status() -> dict:
     now = datetime.now()
     if manual_override_until and now < manual_override_until:
-        return {
+        status = {
             "mode": current_mode,
             "source": "manual",
             "override_until": manual_override_until.isoformat(),
         }
-    return {"mode": current_mode, "source": "schedule", "override_until": None}
+    else:
+        status = {"mode": current_mode, "source": "schedule", "override_until": None}
+    # 予定・手動で決まった画面は scheduled_mode に残し、オフが解ければそちらに戻す
+    status["scheduled_mode"] = current_mode
+    status["transit_disabled"] = _transit_disabled()
+    status["transit_view"] = _transit_view()
+    # 端末は build が変わったら画面を読み直す（version は人が読む番号）
+    status["version"] = versions.version
+    status["build"] = versions.build
+    if status["transit_disabled"]:
+        status["mode"] = "clock"
+    return status
 
 
 async def broadcast_status() -> None:
@@ -92,7 +165,10 @@ async def schedule_loop() -> None:
     while True:
         await asyncio.sleep(30)
         try:
+            await _refresh_suspension()
             if manual_override_until and datetime.now() < manual_override_until:
+                # 手動切り替え中も、列車・バスのオンオフを直接 config.yml で変えたときに端末へ届ける
+                await broadcast_status()
                 continue
             manual_override_until = None
             await _apply_schedule()
@@ -103,9 +179,14 @@ async def schedule_loop() -> None:
 @app.on_event("startup")
 async def startup() -> None:
     global current_mode
+    try:
+        versions.note("controller", code_hash(Path(__file__).parent))
+    except OSError:
+        pass
     sched = load_schedule()
     current_mode = sched.get("default_mode", "transit")
     asyncio.create_task(schedule_loop())
+    asyncio.create_task(_refresh_suspension())
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -113,9 +194,24 @@ async def display(request: Request):
     return templates.TemplateResponse("display.html", {"request": request})
 
 
+SERVICE_WORKER = Path(__file__).parent / "sw.js"
+
+
+# 範囲を / にするため、ルートから配る。build を埋め込むので、版が変わるとブラウザが新しい版に入れ替える
+@app.get("/sw.js")
+async def service_worker():
+    return Response(content=SERVICE_WORKER.read_text(encoding="utf-8").replace("__BUILD__", versions.build),
+                    media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request})
+
+
+@app.get("/api/version")
+async def get_version():
+    return versions.summary()
 
 
 @app.get("/api/mode")
@@ -166,7 +262,8 @@ async def mode_stream(request: Request):
                     payload = await asyncio.wait_for(queue.get(), timeout=25)
                     yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
+                    # コメント行だと端末の onmessage に届かず、途切れたことに気づけないので、名前付きのイベントで送る
+                    yield "event: ping\ndata: {}\n\n"
         finally:
             subscribers.remove(queue)
             display_clients.pop(id(queue), None)
@@ -256,6 +353,8 @@ async def _write_config(text: str) -> dict:
         reloaded = True
     except Exception:
         reloaded = False
+    # 列車・バスをオフにしたら30秒を待たずに時計へ切り替える
+    await broadcast_status()
     return {"ok": True, "reloaded": reloaded}
 
 

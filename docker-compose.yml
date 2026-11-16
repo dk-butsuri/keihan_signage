@@ -9,7 +9,8 @@ services:
     environment:
       - TZ=Asia/Tokyo
       - TRANSIT_URL=http://transit:8000
-      - CLOCK_URL=http://clock:80
+      # 時計はデモの時計「測量」を transit から出す（clock/ の旧い時計は使っていない）
+      - CLOCK_URL=http://transit:8000/clock
       - ADMIN_TOKEN=${ADMIN_TOKEN:-}
     restart: always
     depends_on:

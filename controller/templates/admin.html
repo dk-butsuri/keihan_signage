@@ -140,7 +140,7 @@ textarea{width:100%;min-height:340px;margin-top:10px;font-family:ui-monospace,Me
     <form id="config-form">
       <div class="group-title">表示する情報</div>
       <div class="field"><label for="f-trains">列車</label><label class="switch"><input type="checkbox" id="f-trains" data-key="features.trains"><span></span></label></div>
-      <div class="field"><label for="f-buses">バス</label><label class="switch"><input type="checkbox" id="f-buses" data-key="features.buses"><span></span></label></div>
+      <div class="field"><label for="f-buses">バス</label><label class="switch"><input type="checkbox" id="f-buses" data-key="features.buses"><span></span></label></div><div class="hint">片方だけオンにすると、交通情報の時間帯は「バス「測量」」か「電車「測量」」を表示します（京阪が見合わせ時の画面になるときは、その画面）。どちらもオフにすると、予定や手動の切り替えにかかわらず時計を表示します</div>
       <div class="field"><label for="f-delays">運行情報</label><label class="switch"><input type="checkbox" id="f-delays" data-key="features.delays"><span></span></label></div>
       <div class="field"><label for="f-weather">気象警報</label><label class="switch"><input type="checkbox" id="f-weather" data-key="features.weather"><span></span></label></div>
 
@@ -154,11 +154,6 @@ textarea{width:100%;min-height:340px;margin-top:10px;font-family:ui-monospace,Me
       <div class="group-title">バス</div>
       <div class="field"><label for="b-stop">バス停の名前</label><input type="text" id="b-stop" data-key="buses.stop_name"></div>
       <div class="field"><label for="b-numbers">のりば番号</label><input type="text" id="b-numbers" data-key="buses.stop_numbers" data-list placeholder="1, 2"><div class="hint">複数あるときは「,」で区切る</div></div>
-
-      <div class="group-title">取得の間隔（秒）</div>
-      <div class="field"><label for="i-train">列車</label><input type="number" id="i-train" data-key="intervals.train_seconds" min="30" max="600"></div>
-      <div class="field"><label for="i-bus">バス</label><input type="number" id="i-bus" data-key="intervals.bus_seconds" min="30" max="600"></div>
-      <div class="field"><label for="i-delay">運行情報</label><input type="number" id="i-delay" data-key="intervals.delay_seconds" min="60" max="3600"></div>
 
       <div class="savebar needs-auth"><button class="btn primary" type="submit" id="save-config" disabled>保存して反映</button><button class="btn" type="button" id="reset-config" disabled>元に戻す</button><span class="msg" id="config-msg" role="status"></span></div>
     </form>
@@ -180,6 +175,7 @@ let authed=false, modeStatus=null, schedule={default_mode:'transit',rules:[]}, l
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function hm(iso){return iso?new Date(iso).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'—';}
 function hms(iso){return iso?new Date(iso).toLocaleTimeString('ja-JP'):'—';}
+function md(iso){if(!iso)return '—';const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;}
 function ago(iso){
   if(!iso)return '';
   const s=Math.max(0,Math.round((Date.now()-new Date(iso))/1000));
@@ -225,12 +221,15 @@ $('login-form').onsubmit=async e=>{
 function applyMode(s){
   modeStatus=s;
   $('mode-name').textContent=MODE_LABEL[s.mode]||s.mode;
-  $('mode-source').textContent=s.source==='manual'?`手動で切り替え中（${hm(s.override_until)}まで。その後は予定どおり）`:'予定どおり';
+  const planned=s.source==='manual'?`手動で切り替え中（${hm(s.override_until)}まで。その後は予定どおり）`:'予定どおり';
+  const board=s.mode==='transit'&&(s.transit_view==='bus'||s.transit_view==='train')?s.transit_view:null;
+  const view=board?`${board==='bus'?'バス':'列車'}だけオンのため「${board==='bus'?'バス':'電車'}「測量」」で表示中（京阪が見合わせ時の画面になるときは、その画面を出します）。`:'';
+  $('mode-source').textContent=s.transit_disabled?`列車とバスがオフのため時計を表示中（オンに戻すと${MODE_LABEL[s.scheduled_mode]||s.scheduled_mode}。${planned}）`:view+planned;
   $('back-to-schedule').hidden=s.source!=='manual';
-  for(const id of ['to-transit','to-clock']){const b=$(id);b.classList.toggle('primary',b.dataset.mode===s.mode&&s.source==='manual');}
-  const src=s.mode==='clock'?'/clock/':'/transit/?motion=off';
+  for(const id of ['to-transit','to-clock']){const b=$(id);b.classList.toggle('primary',b.dataset.mode===(s.scheduled_mode||s.mode)&&s.source==='manual');}
+  const src=s.mode==='clock'?'/clock/':board?`/transit/board/${board}/`:'/transit/?motion=off';
   if($('preview-frame').dataset.src!==src){$('preview-frame').dataset.src=src;$('preview-frame').src=src;}
-  $('preview-note').textContent=s.mode==='clock'?'':'端末と同じ画面を縮小して表示';
+  $('preview-note').textContent=s.mode==='clock'||board?'':'端末と同じ画面を縮小して表示';
   renderTimeline();
 }
 function fitPreview(){const w=$('preview').clientWidth;$('preview-frame').style.transform=`scale(${w/1920})`;}
@@ -307,6 +306,7 @@ async function refreshStatus(){
   let status=null,displays=null;
   try{const r=await fetch('/transit/api/status',{cache:'no-store'});if(r.ok)status=await r.json();}catch{}
   try{const r=await fetch('/api/displays',{cache:'no-store'});if(r.ok)displays=await r.json();}catch{}
+  let version=null;try{const r=await fetch('/api/version',{cache:'no-store'});if(r.ok)version=await r.json();}catch{}
   const parts=[];
   if(displays)parts.push(displays.count?{state:'ok',html:row('ok','表示端末',`${displays.count}台が表示中`,`いちばん長い端末は ${hm(displays.connected_since[0])} から接続`)}:{state:'off',html:row('off','表示端末','表示している端末はありません','端末の電源が切れているか、ブラウザが閉じています')});
   if(!status){
@@ -321,6 +321,12 @@ async function refreshStatus(){
     parts.push(sourceRow('バス',status.buses,`正常（${status.buses.count}件）`));
     parts.push(sourceRow('運行情報',status.delays,status.delays.affected?`正常（影響のある路線 ${status.delays.affected}）`:'正常（影響のある路線なし）'));
     if(status.weather)parts.push(sourceRow('気象警報',status.weather,status.weather.warnings?`正常（表示中の警報 ${status.weather.warnings}種類）`:'正常（表示する警報なし）'));
+  }
+  if(version&&version.version){
+    // 番号は「最後に更新した日-これまでの更新の回数」。直近の更新で変わった部品も出す
+    const NAMES={controller:'切り替え（controller）',transit:'交通情報（transit）'};
+    const recent=(version.history||[]).slice(0,3).map(h=>`${h.version}（${md(h.at)} ${hm(h.at)}・${h.parts.map(p=>NAMES[p]||p).join('と')}）`).join('\n');
+    parts.push({state:'ok',html:row('ok','バージョン',version.version,recent)});
   }
   $('status-list').innerHTML=parts.map(p=>p.html).join('');
   const worst=parts.some(p=>p.state==='bad')?'bad':parts.some(p=>p.state==='warn')?'warn':'ok';

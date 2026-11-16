@@ -61,6 +61,13 @@ const path=require('node:path');
         assert.deepEqual(modeRequest,{mode:'clock',override_minutes:60});
         assert.equal(await page.locator('#back-to-schedule').isVisible(),true);
 
+        await page.evaluate(()=>applyMode({mode:'clock',scheduled_mode:'transit',transit_disabled:true,source:'schedule',override_until:null}));
+        assert.match(await page.locator('#mode-source').textContent(),/列車とバスがオフのため時計を表示中（オンに戻すと交通情報/);
+        assert.equal(await page.locator('#preview-frame').getAttribute('src'),'/clock/');
+        await page.evaluate(()=>applyMode({mode:'transit',scheduled_mode:'transit',transit_disabled:false,transit_view:'bus',source:'schedule',override_until:null}));
+        assert.match(await page.locator('#mode-source').textContent(),/バスだけオンのため「バス「測量」」で表示中/);
+        assert.equal(await page.locator('#preview-frame').getAttribute('src'),'/transit/board/bus/');
+
         await page.locator('#rule-time').fill('07:30');await page.locator('#add-rule').click();
         await page.waitForFunction(()=>document.getElementById('rules').children.length===2);
         assert.deepEqual(schedule.rules.map(r=>r.time).sort(),['07:30','18:30']);
@@ -74,7 +81,7 @@ const path=require('node:path');
         assert.equal(savedConfig.buses.stop_name,'駅 "東口"');
         assert.deepEqual(savedConfig.buses.stop_numbers,[1,3]);
         assert.equal(savedConfig.trains.sub_station_id,null);
-        for(const [key,value] of [['features.extra',false],['trains.map_compress_ranges',[[5,10],[14,15]]],['buses.custom',null],['delays',config.delays],['extra_section',config.extra_section]])
+        for(const [key,value] of [['features.extra',false],['trains.map_compress_ranges',[[5,10],[14,15]]],['buses.custom',null],['delays',config.delays],['intervals',config.intervals],['extra_section',config.extra_section]])
             assert.deepEqual(key.split('.').reduce((o,k)=>o[k],savedConfig),value,`${key} should be preserved`);
 
         status={...status,trains:{...status.trains,error:'列車位置を取得できていないため表示を止めています（12:00時点の情報）'},buses:{...status.buses,error:'のりば1: timeout'}};

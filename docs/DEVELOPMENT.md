@@ -9,7 +9,7 @@
 ```
 controller  ─── サイネージ全体を制御（モード管理・スケジュール・SSE配信）
 transit     ─── 交通情報表示（列車・バス・遅延）
-clock       ─── 時計表示
+clock       ─── 時計表示（transit の /clock/。旧 clock サービスは使っていない）
 ```
 
 ### モード
@@ -27,7 +27,7 @@ clock       ─── 時計表示
 |------|------|
 | controller | FastAPI + Uvicorn |
 | transit | FastAPI + Uvicorn |
-| clock | 静的 HTML |
+| clock | transit が `templates/minimal/demo-clock-atlas.html` を `signage` 指定で出す |
 | データ取得 | [keihan_tracker](https://github.com/dk-butsuri/keihan_tracker)（列車・バス） |
 | 運行情報 | [train_operation_info](https://github.com/dk-butsuri/train_operation_info) |
 | コンテナ | Docker / Docker Compose |
@@ -247,6 +247,13 @@ controller は15秒ごとに接続を確かめ、60秒間成功しなければ�
 範囲外の画面比率でも余白を同じ背景で埋め、背後の表示を隠します。
 復旧すると iframe を読み込み直します。
 
+端末は Service Worker（`controller/sw.js`、controller の `/sw.js` から配り、`build` を埋め込む）を登録し、サーバーや回線が止まっていても画面を開けるようにしています。
+保存するのは画面の部品（`/`・`/transit/`・`/clock/`・`/transit/board/*/` とその JS・地図、Google Fonts）だけで、`/api/` は保存しません。
+画面はネットワークを優先し、通信の失敗・5xx・8秒の無応答のときだけ保存した版を出します（5xx を含めるのは、Cloudflare や controller のエラーページを素通りさせないため）。
+`display.html` の接続の確認は `fetch` で投げるので Service Worker は答えず、止まっていれば今までどおり再接続画面になります。
+モードの通知（EventSource）は、サーバーが25秒ごとに `ping` イベントを送り、端末は閉じたまま（途中の Cloudflare がエラーを返したときなど）か90秒届かなければつなぎ直します。
+取得のループ（`index.html` の `fetchTrains` など、`demo-clock-atlas.js` の `loadInfo`）は、描画で例外が出ても次の取得を `finally` で予約します。
+
 画面のテストは Playwright が入った Node.js 環境で `node tests/test_display.cjs` を実行します。
 外部サービスへのアクセスは置き換え、通信失敗・復旧・画面の切り替えを確かめます。
 `node tests/test_operations_display.cjs` では運行情報の切替、再取得時の継続、記録内の全場面での配置も確認します。
@@ -272,6 +279,10 @@ controller は15秒ごとに接続を確かめ、60秒間成功しなければ�
 時計・列車位置を固定して表示します。時間軸や再生操作は付けず、運行情報のページ切替だけを動かします。
 想定データは `demo_scenarios.py` にあり、実際の運行記録とは別です。
 
+バージョンは「YYMMDD-N」（最後に更新した日-これまでの更新の通し番号）で、controller が `controller_data/version.json` に記録します（`controller/version.py`）。controller は起動時に自分のプログラムのハッシュを、transit のハッシュは `/api/status` の `code_hash` から30秒ごとに読み、どちらかが変わったら番号を1つ進めます。設定（`config.yml`）や実行時のデータはハッシュに含めません。5分以内に続いた変化は同じ回にまとめます（その回の始まりから数えます）。`/api/mode` と端末への通知には人が読む `version` と、中身が変わるたびに変わる `build` が入り、端末（`display.html`）は `build` が変わると自分でページを読み直します。管理画面の状態の一覧に、今のバージョンと直近の更新が出ます。確認は `tests/test_version.py`。
+
+デモの一覧（`/demo`、`templates/minimal/demo-catalog.html`）は、サイネージの画面・演出・状況の想定・記録としくみの4つに分け、各デモをサムネイルと1行の要約（シナリオの `summary`）で出します。長い説明（`description`）は各デモのページに出します。サムネイルは `docs/demo-thumbs/<id>.jpg` で、`/demo/<id>/thumb.jpg` から配ります。見た目を変えたら `node tools/build_demo_thumbs.cjs http://<controller>/demo [id ...]` で撮り直してください（id を付けるとそのデモだけ）。デモを足すときは `summary` とサムネイルも足します（`tests/test_demo.py` が確かめます）。
+
 `/demo/display-patterns` は表示パターンの一覧です。通常／圧縮、到着予測の有無で絞り込めます。
 補足パターンには、2時間以上の遅延、3桁の停止時間、定刻不明、補足時刻なしを用意しています。
 カードは通常デモの描画処理で生成するため、カードの見た目や表示条件の変更も一覧に反映されます。
@@ -280,7 +291,20 @@ controller は15秒ごとに接続を確かめ、60秒間成功しなければ�
 
 `/demo/startup-intro-atlas`（`templates/minimal/demo-intro-atlas.js`）は起動イントロの別版「測量」です。シナリオの `variant: "atlas"` で専用のページと再生処理に切り替わり、地図は `/demo/startup-intro-atlas/map.json`（`templates/minimal/demo-intro-atlas-map.json`）から読みます。地図は OpenStreetMap（ODbL）と国土地理院の標高タイル（dem5a）を `tools/build_intro_atlas.py` で加工したもので、取得方法はスクリプト冒頭にあります。画面とページの両方に出典を出しているので消さないでください。建物は学校と駅のまわりだけに絞っています（全域の約1.4万棟を線で描くと1フレームに1秒近くかかったため）。地図の登場は学校から広がる1つの「波」で決まります。各頂点に学校からの距離 `at` を持たせてあり、波が通ってからの秒数で線の明るさ・地形の盛り上がり・建物の伸びを決めています。等高線は読み込み時に標高の格子から作ります。案内画面の組み上げ部分は `demo-intro.js` と同じ処理の写しなので、組み上げの値を変えたら両方そろえてください。`tests/test_demo_intro_atlas.py` と `tests/test_demo_intro_atlas.cjs` で確認します。
 
-`/demo/clock-atlas`（`templates/minimal/demo-clock-atlas.js`）は、同じ地図を背景にした時計です。シナリオの `mode: "clock"` で専用のページに切り替わり、地図は「測量」と同じファイルを読みます。読み込んだ直後に一度だけ「測量」と同じ波で地図を立ち上げ、そのあとは止まりません。視点は向きが一定の速さで回り、見下ろす角度・距離・見る場所がそれぞれ違う周期で揺れます。20秒ごとに学校と駅から交互に波を出し（毎分00秒は学校から）、線路の上の光は時刻だけで決めています（飾りで、実際の列車の位置ではありません）。時刻合わせは `clock/index.html` と同じ `/api/time` です。地図の描き方は `demo-intro-atlas.js` の写しなので、線の見た目を変えたら両方そろえてください。描画に時間がかかる端末では自動で1コマおきに描きます。確認は `tests/test_demo_clock_atlas.cjs`。時刻の下の運行情報（`/transit/api/delays` の `groups`）と、日付の上の気象警報の札（`/transit/api/weather` を `weather.js` で描く）は実際の情報で、1分ごとに取り直し、10分取れなければ消します。平常のときは社名が灰色で並ぶだけです。乱れている路線の一覧は Noto Sans JP で3行ずつ出し、4秒ごとに次の3行へ切り替えます（どの組が出るかは時刻で決まります）。切り替えに気づけるよう、一覧の下の線が4秒かけて左から伸び、切り替わるときは1行ずつ左から引き直します。ページの「想定（荒天の日）」は `severe-weather` の想定データと決め打ちの警報で見え方を確かめるためのものです。いまはデモだけで、時計の画面（`clock/`）は差し替えていません。
+`/demo/clock-atlas`（`templates/minimal/demo-clock-atlas.js`）は、同じ地図を背景にした時計です。シナリオの `mode: "clock"` で専用のページに切り替わり、地図は「測量」と同じファイルを読みます。読み込んだ直後に一度だけ「測量」と同じ波で地図を立ち上げ、そのあとは止まりません。視点は向きが一定の速さで回り、見下ろす角度・距離・見る場所がそれぞれ違う周期で揺れます。20秒ごとに学校と駅から交互に波を出し（毎分00秒は学校から）、線路の上の光は時刻だけで決めています（飾りで、実際の列車の位置ではありません）。時刻合わせは `clock/index.html` と同じ `/api/time` です。地図の描き方は `demo-intro-atlas.js` の写しなので、線の見た目を変えたら両方そろえてください。描画に時間がかかる端末では自動で1コマおきに描きます。確認は `tests/test_demo_clock_atlas.cjs`。時刻の下の運行情報（`/transit/api/delays` の `groups`）と、日付の上の気象警報の札（`/transit/api/weather` を `weather.js` で描く）は実際の情報で、1分ごとに取り直し、10分取れなければ消します。平常のときは社名が灰色で並ぶだけです。乱れている路線の一覧は Noto Sans JP で3行ずつ出し、4秒ごとに次の3行へ切り替えます（どの組が出るかは時刻で決まります）。切り替えに気づけるよう、一覧の下の線が4秒かけて左から伸び、切り替わるときは1行ずつ左から引き直します。ページの「想定（荒天の日）」は `severe-weather` の想定データと決め打ちの警報で見え方を確かめるためのものです。サイネージの時計の画面は、このページを transit の `/clock/`（`demo.py` の `signage_clock`）で `signage` を付けて出したものです。見出し・操作の部品・説明を隠して画面いっぱいに出し、地図・`player.js`・`weather.js` は `/clock/` の下から読みます。controller は `CLOCK_URL=http://transit:8000/clock` でここに中継します。旧い `clock/index.html` は使っていません。
+
+`/demo/bus-atlas` と `/demo/train-atlas` は同じページ・同じ `demo-clock-atlas.js` で、シナリオの `board`（`bus` / `train`）を `#atlas-clock` の `data-board` で受け取り、左の面に発車案内を出します。時計は右上に小さく置き、地図はカメラの `anchor` を右へ寄せ、左の面は横向きのグラデーションで沈めます。案内は `/transit/api/buses` か `/transit/api/trains` を運行情報・気象警報と一緒に30秒ごとに取り直し、10分取れなければ「取得できていません」に替えます。行の書き方（バスの残り分数の読み方、列車の種別の色、到着予測が立たないときは遅れを右に出すなど）は `index.html` に合わせてあります。入りきらない行は、警報と運行情報を描いたあとに丸ごと隠します。ページの「想定（平常の日）」「想定（荒天の日）」は `normal` / `severe-weather` の想定データを使います（デモは平常の日で開きます）。サイネージ用は transit の `/board/bus/`・`/board/train/`（`demo.py` の `signage_board`）です。controller は `_transit_view()` で、列車とバスの片方だけがオンなら `transit_view` を `bus` / `train` にし、端末（`display.html`）は交通情報の時間帯にその画面を開きます。京阪が見合わせ時の画面のとき（transit の `/api/status` の `trains.suspended` を `schedule_loop` が30秒ごとに読む）は `full` に戻し、いつもの画面の専用表示を出します。確認は `tests/test_demo_board_atlas.cjs` と `tests/test_controller_proxy.py`。
+
+端末（`controller/templates/display.html`）が時計・バス・電車の「測量」（`/clock/`・`/transit/board/*/`）から交通情報の画面（`/transit/`）へ切り替えるときは、起動イントロ「測量」の後半でつなぎます（handoff）。やりとりは `postMessage` で、順に次のとおりです。
+
+1. 端末は表の iframe を「測量」のまま残し、裏に透明な iframe で `/transit/?handoff=atlas` を開く
+2. 交通情報の画面（`index.html`・`opening.js`）は、組み上げの準備ができても始めず、親に `{type:'signage:handoff',state:'ready',rule}` を送る。`rule` は見出しの下線の位置（端末の画面の座標）。合図を待つので、あきらめるまでの時間は2秒でなく20秒
+3. 端末は「測量」に `{type:'signage:outro',rule}` を送る。「測量」（`demo-clock-atlas.js` の `playOutro`）は、文字を消し、準急を香里園に止め、真上へ回り込んで線路を `rule` の位置の線に重ね、地図を消す（約3.2秒）。最後のコマ（線だけ）で止めて `{type:'signage:outro',state:'done'}` を返す。動きは `demo-intro-atlas.js` の「到着」「寄る」と同じ値
+4. 端末は交通情報の画面に `{type:'signage:handoff-go'}` を送る。交通情報の画面は見出しの下線を引かずに（最初から出したまま）組み上げを始め、`running` を返す。端末はそこで裏の iframe を表に出し、「測量」の iframe を消す
+
+交通情報の画面が `skipped`（見合わせ時の画面・取得エラー・動きを減らす設定など）を返したら、後半を流さずにすぐ入れ替えます。「測量」が8秒返事をしなければ組み上げに進み、20秒で何が来なくても入れ替えます。途中で別の画面に切り替わったら、裏の iframe を捨てます。動きを減らす設定の端末ではつなぎません。デモのページでは「交通情報の画面への切り替え」で後半だけを試せます（下線の位置は 1920×1080 の交通情報の画面の値）。確認は `tests/test_handoff_display.cjs`（`SIGNAGE_DEMO_URL` に transit のデモ）で、端末の入れ替え・途中の切り替え・返事がないとき、交通情報の画面が合図まで待つこと、「測量」の最後のコマが交通情報の画面の下線と同じ画素になることを確かめます。
+
+「測量」の時計・バス・電車の画面は、交通情報の画面と同じく16:8〜16:10で画面いっぱいに描きます（`demo-clock-atlas.js` の `layout()`）。1920×1080 から増えた分は、横は右の地図の側へ、縦は上下に半分ずつ足し、文字は縦の中央に寄せます（CSS の `--dy`）。範囲の外の比率は近いほうの比率のまま縮めて中央に置きます。確認は `tests/test_atlas_aspect.cjs`。地図と一緒に動く文字（地点名・座標・距離の輪の数字）は、`fillText` だと整数の画素にそろって1画素ずつ跳ねて見えるため、`smoothText()` で一度だけ小さな canvas に描いて `drawImage` で小数の位置に置いています。
 
 `/demo/hourly-honsen`（`templates/minimal/demo-chime.js`）は同じ線・駅・光を時報用に組み直したものです。描画は本番と共通の `templates/minimal/chime-core.js` にあり、デモは再生操作だけを持ちます。離れる・寄る・組み上げはイントロ側の時刻へ写して再生するので、イントロの寄り方や組み上げの値を変えると時報にもそのまま効きます。線・駅・光の値は `demo-intro.js` と `chime-core.js` の両方の `SPEC` にあるので、片方を変えたらもう片方もそろえてください。わくわく版（`/demo/hourly-honsen-hype`）は同じファイルで、シナリオの `variant: "hype"` を `data-variant` で受け取り、`HYPED` の値と追加の列車（`collect: true`、香里園を通った時刻に輪へ色をためる）だけを変えています。本番の時報もこの版です。
 再生・一時停止・最初からの再生・1フレーム送り戻し・シークに対応します。「つなぎから」で受け渡し部分から再生できます。自動ループは行わず、タブを非表示にすると停止します。
@@ -338,7 +362,7 @@ docker compose up -d --no-deps transit controller
 | `GET /api/config/json`・`PUT /api/config/json` | config.yml を JSON で読み書き（書き込みは要 Bearer トークン。コメントは残らない） |
 | `GET /transit/api/status` | 列車・バス・運行情報を最後に取得できた時刻、エラー、見合わせ判定（管理画面の「動作状況」） |
 | `GET /transit/...` | transit サービスへのプロキシ |
-| `GET /clock/...` | clock サービスへのプロキシ |
+| `GET /clock/...` | 時計の画面（`CLOCK_URL`、既定の構成では transit の `/clock/`）へのプロキシ |
 
 ### 手動モード変更
 

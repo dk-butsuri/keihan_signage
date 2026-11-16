@@ -252,3 +252,54 @@ def test_bus_delay_demo_preserves_unknown_and_arrived_states():
     assert buses[4]['delay_text'] == '到着済'
     assert buses[3]['status'] == '約24分後に到着'
     assert buses[5]['status'] == 'まもなく到着'
+
+
+def test_signage_clock_serves_atlas_clock_without_demo_chrome():
+    from fastapi.testclient import TestClient
+    from fastapi import FastAPI
+    import demo
+    app = FastAPI(); app.include_router(demo.router)
+    client = TestClient(app)
+    page = client.get('/clock/')
+    assert page.status_code == 200
+    assert 'id="atlas-clock"' in page.text and 'clock-demo' not in page.text and 'デモ一覧' not in page.text
+    for name in ('player.js', 'weather.js', 'map.json'):
+        assert client.get(f'/clock/{name}').status_code == 200
+    assert client.get('/clock/main.py').status_code == 404
+    # デモの時計はそのまま
+    demo_page = client.get('/demo/clock-atlas')
+    assert demo_page.status_code == 200 and 'デモ一覧' in demo_page.text
+
+
+def test_signage_boards_serve_atlas_with_departures():
+    from fastapi.testclient import TestClient
+    from fastapi import FastAPI
+    import demo
+    app = FastAPI(); app.include_router(demo.router)
+    client = TestClient(app)
+    for kind, name in (('bus', '同志社香里'), ('train', '香里園')):
+        page = client.get(f'/board/{kind}/')
+        assert page.status_code == 200
+        assert f'data-board="{kind}"' in page.text and name in page.text and 'デモ一覧' not in page.text
+        # サイネージでは実際の情報を出す
+        assert '<option value="live" selected>' in page.text
+        for file in ('player.js', 'weather.js', 'map.json'):
+            assert client.get(f'/board/{kind}/{file}').status_code == 200
+        assert client.get(f'/board/{kind}/main.py').status_code == 404
+        demo_page = client.get(f'/demo/{kind}-atlas')
+        assert demo_page.status_code == 200 and 'デモ一覧' in demo_page.text and '<option value="normal" selected>' in demo_page.text
+    assert client.get('/board/clock/').status_code == 404
+    # 時計の画面には発車案内を出さない
+    assert 'data-board' not in client.get('/clock/').text
+
+
+def test_catalog_cards_have_thumbnails_and_short_summaries():
+    client = TestClient(main.app)
+    page = client.get('/demo').text
+    for scenario in demo.SCENARIOS:
+        # 一覧は1行の要約だけ。長い説明は各デモのページに出す
+        assert scenario['summary'] in page and len(scenario['summary']) <= 30
+        response = client.get(f"/demo/{scenario['id']}/thumb.jpg")
+        assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
+    assert client.get('/demo/missing/thumb.jpg').status_code == 404
+    client.close()

@@ -178,6 +178,11 @@ _last_bus_success: Optional[datetime.datetime] = None
 _last_delay_success: Optional[datetime.datetime] = None
 _last_unreliable_ratio: Optional[float] = None
 _started_at = datetime.datetime.now(JST)
+# controller がバージョン（YYMMDD-N）を数えるための、このプログラム一式のハッシュ
+import importlib.util as _ilu
+_vspec = _ilu.spec_from_file_location("_deploy_version", Path(__file__).parent / "controller/version.py")
+_vmod = _ilu.module_from_spec(_vspec); _vspec.loader.exec_module(_vmod)
+CODE_HASH = _vmod.code_hash(Path(__file__).parent)
 _operation_tracker = None
 _operation_providers = None   # _operation_tracker を作ったときの delays.providers
 
@@ -808,6 +813,7 @@ async def get_status():
     return {
         "now": now.isoformat(),
         "started_at": _started_at.isoformat(),
+        "code_hash": CODE_HASH,
         "trains": {
             "enabled": features.get("trains", True),
             "last_success": iso(_last_pos_success),

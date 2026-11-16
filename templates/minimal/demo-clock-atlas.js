@@ -9,6 +9,8 @@
   const secondsText = root.querySelector('.clock-seconds');
   const status = root.querySelector('[role="status"]');
   const opsBox = root.querySelector('.ops'), weatherBox = root.querySelector('.wx'), infoSelect = root.querySelector('[data-info]');
+  /* 発車案内つきの画面（バス・電車）。時計は脇役なので小さく、地図は右に寄せる。 */
+  const boardKind = root.dataset.board || null, boardList = root.querySelector('[data-board=list]');
 
   const SPEC = {
     W: 1920, H: 1080,
@@ -48,11 +50,46 @@
       pitch: { mid: 45, swing: 9, period: 97, phase: 3.1416 },
       dist: { mid: 1780, swing: 440, period: 131, phase: 0.82 },
       focus: { mid: 0.42, swing: 0.34, period: 173, phase: 3.665, side: 130, sidePeriod: 61 }
+    },
+    /* 交通情報の画面へ切り替えるときの後半。起動イントロ「測量」（demo-intro-atlas.js）の「到着」「寄る」と同じ動きで、
+       準急が香里園に止まり、真上へ回り込んで、線路が交通情報の画面の見出しの下線に重なる。秒は後半を始めてから。 */
+    outro: {
+      fade: 0.6, trains: 0.5,
+      train: { kind: '準急', speed: 700, stopsAt: 1.2, brakeDur: 1.2, fadeIn: 0.3, perSpeed: 0.34, max: 420 },
+      pulse: { dur: 0.75, radius: 40 },
+      camera: { start: 1.45, dur: 1.6, ease: [0.5, 0, 0.25, 1], pxPerMeter: 1.55 },
+      rail: [38, 38, 42], hold: 0.15
     }
   };
+  const OUTRO_END = SPEC.outro.camera.start + SPEC.outro.camera.dur + SPEC.outro.hold;
+
+  /* 案内の面の右端（board の left + width）。地図の中心・暗くする帯・地点名の出る範囲をこれに合わせる。 */
+  const boardRight = boardKind === 'train' ? 96 + 940 : 96 + 780;
+  if (boardKind) SPEC.callout.hideLeft = [boardRight + 20, boardRight + 160];
+
+  /* 画面の縦横比に合わせて、描く範囲（SPEC.W × SPEC.H）を広げる。交通情報の画面（index.html）と同じく、
+     16:8〜16:10 のあいだは画面いっぱいに使い、それより外は近いほうの比率のまま縮めて中央に置く。
+     1920×1080 より増えた分は、横は右（地図の側）へ、縦は上下に半分ずつ足し、文字は縦の中央に寄せる。 */
+  const BASE = { W: 1920, H: 1080, anchor: SPEC.camera.anchor.slice(), open: SPEC.camera.open.anchor.slice(), backing: SPEC.clock.backing.slice() };
+  function layout() {
+    const aspect = Math.min(16 / 8, Math.max(16 / 10, stage.clientWidth / Math.max(1, stage.clientHeight)));
+    const W = Math.max(BASE.W, Math.round(BASE.H * aspect)), H = Math.max(BASE.H, Math.round(BASE.W / aspect));
+    if (W === SPEC.W && H === SPEC.H && overlay.style.width === W + 'px') return false;
+    const dx = W - BASE.W, dy = (H - BASE.H) / 2;
+    SPEC.W = W; SPEC.H = H;
+    canvas.width = W; canvas.height = H;
+    for (const element of [canvas, overlay]) { element.style.width = W + 'px'; element.style.height = H + 'px'; }
+    overlay.style.setProperty('--dy', dy + 'px');
+    SPEC.camera.anchor = boardKind ? [Math.round((boardRight + 40 + W) / 2), 600 + dy] : [BASE.anchor[0] + dx, BASE.anchor[1] + dy];
+    SPEC.camera.open.anchor = [W / 2, BASE.open[1] + dy];
+    SPEC.clock.backing = [BASE.backing[0], BASE.backing[1] + dy, BASE.backing[2], BASE.backing[3]];
+    return true;
+  }
 
   let world = null, ready = false, raf = 0, startedAt = 0, frozen = false, scale = 1;
   let offset = 0, shownSecond = -1, clockOn = false, slow = 0, skip = false;
+  /* outro: 後半を流しているあいだの状態（始めた時刻 t0・下線の位置 geo）。bend: そのコマの進み具合。 */
+  let outro = null, bend = null;
 
   const clamp01 = x => Math.max(0, Math.min(1, x));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -64,6 +101,19 @@
   const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
   const TAU = Math.PI * 2;
+  const mix = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+  const angleLerp = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
+  function bezier([x1, y1, x2, y2]) {
+    const f = (u, a, b) => 3 * (1 - u) * (1 - u) * u * a + 3 * (1 - u) * u * u * b + u * u * u;
+    return x => {
+      if (x <= 0) return 0;
+      if (x >= 1) return 1;
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 24; i++) { const u = (lo + hi) / 2; if (f(u, x1, x2) < x) lo = u; else hi = u; }
+      return f((lo + hi) / 2, y1, y2);
+    };
+  }
+  const outroEase = bezier(SPEC.outro.camera.ease);
 
   /* 地図は描く前に一度だけ平らな配列にしておく。at は学校からの距離、at2 は駅からの距離（波の出どころが2つあるため）。 */
   function prepare(map) {
@@ -251,6 +301,18 @@
     cam.dist = dist; cam.f = C.focal; cam.yaw = yaw; cam.pitch = pitch;
     cam.ax = lerp(O.anchor[0], C.anchor[0], settle); cam.ay = lerp(O.anchor[1], C.anchor[1], settle);
   }
+  /* 後半: いまの視点から、香里園の真上で線路が横一直線に見える視点へ移す。1 m が pxPerMeter 画素になる高さで、
+     駅を見出しの下線の左端に置く。 */
+  function blendCamera(k) {
+    if (k <= 0) return;
+    const S = world.station, g = outro.geo;
+    const yaw = angleLerp(cam.yaw, world.rail.heading, k), pitch = lerp(cam.pitch, Math.PI / 2, k);
+    cam.dist = Math.exp(lerp(Math.log(cam.dist), Math.log(SPEC.camera.focal / SPEC.outro.camera.pxPerMeter), k));
+    cam.tx = lerp(cam.tx, S.x, k); cam.ty = lerp(cam.ty, S.y, k); cam.tz = lerp(cam.tz, S.z, k);
+    cam.ax = lerp(cam.ax, g.ruleLeft, k); cam.ay = lerp(cam.ay, g.ruleY, k);
+    cam.cy = Math.cos(yaw); cam.sy = Math.sin(yaw); cam.cp = Math.cos(pitch); cam.sp = Math.sin(pitch);
+    cam.yaw = yaw; cam.pitch = pitch;
+  }
   const out = [0, 0, 0];
   function project(x, y, z) {
     const dx = x - cam.tx, dy = y - cam.ty, dz = z - cam.tz;
@@ -411,13 +473,16 @@
       if (p[2] < near || offscreen(p[0], p[1])) continue;
       const text = scrambled(`${ring.r} m`, age, 0, .35), w = ctx.measureText(text).width;
       ctx.fillStyle = rgb(SPEC.bg, .85); ctx.fillRect(p[0] + 5, p[1] - 8, w + 8, 16);
-      ctx.fillStyle = rgb(hex(SPEC.hud.color), smooth(clamp01(age / .25))); ctx.fillText(text, p[0] + 9, p[1]);
+      smoothText(text, p[0] + 9, p[1], SPEC.hud.color, smooth(clamp01(age / .25)));
     }
   }
 
+  /* 後半の寄りの終わりには、駅から先の弧長をそのまま見出しの下線の上に伸ばした形へ移す。 */
   function railScreen(s) {
     const q = railPoint(world.rail, s), p = project(q[0], q[1], q[2]);
-    return [p[0], p[1], p[2]];
+    if (!bend || bend.straight <= 0) return [p[0], p[1], p[2]];
+    const g = outro.geo, tx = g.ruleLeft + (s - world.rail.home) * SPEC.outro.camera.pxPerMeter;
+    return [lerp(p[0], tx, bend.straight), lerp(p[1], g.ruleY, bend.straight), p[2]];
   }
   /* 光の尾は線路の上をなぞる。 */
   function streakPath(sHead, sTail) {
@@ -450,6 +515,17 @@
   function drawRail(t) {
     const L = SPEC.rail, R = world.rail, drawn = inOutCubic(prog(t, L.drawStart, L.drawDur));
     if (drawn <= 0) return;
+    const k = bend ? bend.k : 0, g = outro?.geo, color = k > 0 ? mix(L.color, SPEC.outro.rail, k) : L.color;
+    ctx.save();
+    if (k > 0) {
+      /* 下線の両端より外は、寄るにつれて切り落とす。 */
+      const left = lerp(-200, g.ruleLeft, k), right = lerp(SPEC.W + 200, g.ruleRight, k);
+      ctx.beginPath(); ctx.rect(left, 0, right - left, SPEC.H); ctx.clip();
+      if (bend.straight >= 1) {
+        ctx.fillStyle = rgb(color); ctx.fillRect(left, g.ruleY - g.width / 2, right - left, g.width);
+        ctx.restore(); return;
+      }
+    }
     const end = R.length * drawn, path = new Path2D();
     let pen = false;
     for (let s = 0; s <= end; s += 8) {
@@ -457,13 +533,14 @@
       if (p[2] < near || offscreen(p[0], p[1])) { pen = false; continue; }
       if (pen) path.lineTo(p[0], p[1]); else { path.moveTo(p[0], p[1]); pen = true; }
     }
-    ctx.lineWidth = L.width; ctx.strokeStyle = rgb(L.color); ctx.stroke(path);
+    ctx.lineWidth = k > 0 ? lerp(L.width, g.width, k) : L.width; ctx.strokeStyle = rgb(color); ctx.stroke(path);
     if (drawn < 1) drawStreak(streakPath(end, Math.max(0, end - 300)), SPEC.ink, Math.sin(Math.PI * drawn));
+    ctx.restore();
   }
   /* 列車の光は飾り。実際の列車の位置ではない。時計の時刻だけで決めて、読み込み直しても同じ流れが続くようにする。 */
   const KINDS = SPEC.trains.order.map(kind => ({ kind, color: hex(SPEC.colors[kind]), speed: SPEC.trains.speed[kind] }));
   function drawTrains(t, now) {
-    const T = SPEC.trains, R = world.rail, fade = smooth(prog(t, T.from, 1.2));
+    const T = SPEC.trains, R = world.rail, fade = smooth(prog(t, T.from, 1.2)) * (bend ? 1 - smooth(prog(bend.u, 0, SPEC.outro.trains)) : 1);
     if (fade <= 0) return;
     const seconds = now / 1000, latest = Math.floor(seconds / T.every);
     for (let index = latest; index > latest - 4; index--) {
@@ -478,6 +555,45 @@
     }
   }
 
+  /* 後半の準急。香里園の手前から減速して止まり、寄るあいだに消える（起動イントロ「測量」と同じ）。 */
+  const STOPPER = hex(SPEC.colors[SPEC.outro.train.kind]);
+  function drawStopper() {
+    if (!bend) return;
+    const T = SPEC.outro.train, R = world.rail, u = bend.u;
+    const brakeFrom = T.stopsAt - T.brakeDur, brakeS = R.home - T.speed * T.brakeDur / 2, a = T.speed / T.brakeDur;
+    const du = Math.max(0, Math.min(T.brakeDur, u - brakeFrom));
+    const s = u < brakeFrom ? brakeS - T.speed * (brakeFrom - u) : brakeS + T.speed * du - a * du * du / 2;
+    const v = u < brakeFrom ? T.speed : Math.max(0, T.speed - a * du);
+    const settle = u >= T.stopsAt ? smooth(prog(u, T.stopsAt, .5)) : 0;
+    const fade = smooth(prog(u, 0, T.fadeIn)) * (1 - smooth(prog(bend.k, .45, .5))) * (1 - smooth(prog(bend.k, 0, .3)));
+    if (fade <= 0 || railScreen(s)[2] < near) return;
+    drawStreak(streakPath(s, s - Math.min(T.max, v * T.perSpeed)), STOPPER, fade * (1 - .2 * settle));
+  }
+
+  /* 地図と一緒に動く文字。canvas の fillText は文字を整数の画素にそろえて描くので、少しずつ動かすと
+     線は滑らかなのに文字だけ1画素ずつ跳ねて見える。文字は一度だけ小さな canvas に描いておき、
+     drawImage で小数の位置に置く（画像は画素のあいだも補間して描かれる）。 */
+  const sprites = new Map();
+  function smoothText(text, x, y, color, alpha) {
+    if (alpha <= 0 || !text) return;
+    const key = ctx.font + '|' + ctx.textBaseline + '|' + color + '|' + text;
+    let sprite = sprites.get(key);
+    if (!sprite) {
+      if (sprites.size > 300) sprites.clear();
+      const font = ctx.font, baseline = ctx.textBaseline, m = ctx.measureText(text), pad = 3;
+      const ascent = Math.ceil(m.actualBoundingBoxAscent), descent = Math.ceil(m.actualBoundingBoxDescent);
+      const image = document.createElement('canvas');
+      image.width = Math.ceil(m.width) + pad * 2; image.height = ascent + descent + pad * 2;
+      const c = image.getContext('2d');
+      c.font = font; c.textBaseline = baseline; c.fillStyle = color; c.fillText(text, pad, pad + ascent);
+      sprite = { image, dx: pad, dy: pad + ascent };
+      sprites.set(key, sprite);
+    }
+    const before = ctx.globalAlpha;
+    ctx.globalAlpha = before * alpha;
+    ctx.drawImage(sprite.image, x - sprite.dx, y - sprite.dy);
+    ctx.globalAlpha = before;
+  }
   function scrambled(text, t, start, dur) {
     const p = prog(t, start, dur);
     if (p >= 1) return text;
@@ -554,42 +670,70 @@
     ctx.fillStyle = rgb(SPEC.ink, a); ctx.beginPath(); ctx.arc(x, y, 2.5, 0, TAU); ctx.fill();
     ctx.textAlign = 'left';
     ctx.font = `400 ${C.nameSize}px "Zen Kaku Gothic New", "Noto Sans JP", sans-serif`; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = rgb(SPEC.ink, a * smooth(prog(t, start + .15, .3))); ctx.fillText(name, tx + 8, ty + 8);
+    smoothText(name, tx + 8, ty + 8, rgb(SPEC.ink), a * smooth(prog(t, start + .15, .3)));
     ctx.font = `300 ${C.dataSize}px ${SPEC.hud.font}`; ctx.textBaseline = 'top';
-    ctx.fillStyle = rgb(hex(SPEC.hud.color), a);
-    ctx.fillText(scrambled(data, t, start + .2, .5), tx + 8, ty + 16);
+    smoothText(scrambled(data, t, start + .2, .5), tx + 8, ty + 16, SPEC.hud.color, a);
   }
   function drawStation(t) {
-    const shown = smooth(prog(t, SPEC.callout.station, .3));
+    const shown = smooth(prog(t, SPEC.callout.station, .3)) * (bend ? 1 - smooth(prog(bend.k, .15, .55)) : 1);
     if (shown <= 0) return;
     const p = project(world.station.x, world.station.y, world.station.z);
     if (p[2] < near) return;
-    ctx.fillStyle = rgb(SPEC.bg, shown); ctx.strokeStyle = rgb(SPEC.ink, shown); ctx.lineWidth = 1.5;
+    let fill = SPEC.bg;
+    if (bend) {
+      /* 準急が止まったら、駅の輪を準急の色に灯して波紋を1つ出す。 */
+      const T = SPEC.outro.train, P = SPEC.outro.pulse, arrived = prog(bend.u, T.stopsAt, P.dur);
+      if (arrived > 0 && arrived < 1) {
+        ctx.strokeStyle = rgb(STOPPER, (1 - arrived) * .9 * shown); ctx.lineWidth = lerp(2.5, .5, arrived);
+        ctx.beginPath(); ctx.arc(p[0], p[1], lerp(SPEC.arrival.ring, P.radius, outCubic(arrived)), 0, TAU); ctx.stroke();
+      }
+      fill = mix(SPEC.bg, STOPPER, smooth(prog(bend.u, T.stopsAt - .1, .3)) * .55);
+    }
+    ctx.fillStyle = rgb(fill, shown); ctx.strokeStyle = rgb(SPEC.ink, shown); ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(p[0], p[1], SPEC.arrival.ring, 0, TAU); ctx.fill(); ctx.stroke();
   }
 
+  function outroAt(t) {
+    if (!outro) return null;
+    const O = SPEC.outro, u = Math.max(0, t - outro.t0), k = outroEase(prog(u, O.camera.start, O.camera.dur));
+    return { u, k, ui: smooth(prog(u, 0, O.fade)), straight: smooth(prog(k, .35, .6)), map: 1 - smooth(prog(k, .2, .55)) };
+  }
   function draw(t, now) {
     ctx.clearRect(0, 0, SPEC.W, SPEC.H);
+    bend = outroAt(t);
     setWave(t, now); setCamera(t);
-    const R = SPEC.roads, S = SPEC.reveal;
-    drawLines('terrain', null, SPEC.ink, SPEC.terrain.alpha, 1, 0, SPEC.terrain.gain);
-    drawLines('contour', null, SPEC.ink, SPEC.contour.alpha, 1, 0, SPEC.contour.gain);
-    drawLines('water', null, [150, 170, 190], .35, 1, 0, .5);
-    for (const cls of [2, 1, 0]) drawLines('road', line => line.cls === cls, SPEC.ink, R.alpha[cls], cls ? 1 : 1.4, R.lag[cls], R.gain[cls]);
-    drawLines('track', null, SPEC.ink, .18 * (1 - smooth(prog(t, SPEC.rail.drawStart, .4))), 1, R.lag[0], .8);
-    drawRanges(t);
-    drawBuildings();
-    ctx.setLineDash(SPEC.campus.dash);
-    drawLines('ground', null, SPEC.ink, .45, 1, 0, 0);
-    drawLines('campus', null, SPEC.ink, SPEC.campus.alpha * smooth(prog(t, S.start + .1, .4)), 1.2, 0, 0);
-    ctx.setLineDash([]);
-    drawDots();
-    drawWaveRing();
+    if (bend) blendCamera(bend.k);
+    const R = SPEC.roads, S = SPEC.reveal, map = bend ? bend.map : 1;
+    if (map > 0) {
+      /* 後半では、寄るにつれて地図をまとめて薄くする。 */
+      ctx.globalAlpha = map;
+      drawLines('terrain', null, SPEC.ink, SPEC.terrain.alpha, 1, 0, SPEC.terrain.gain);
+      drawLines('contour', null, SPEC.ink, SPEC.contour.alpha, 1, 0, SPEC.contour.gain);
+      drawLines('water', null, [150, 170, 190], .35, 1, 0, .5);
+      for (const cls of [2, 1, 0]) drawLines('road', line => line.cls === cls, SPEC.ink, R.alpha[cls], cls ? 1 : 1.4, R.lag[cls], R.gain[cls]);
+      drawLines('track', null, SPEC.ink, .18 * (1 - smooth(prog(t, SPEC.rail.drawStart, .4))), 1, R.lag[0], .8);
+      drawRanges(t);
+      drawBuildings();
+      ctx.setLineDash(SPEC.campus.dash);
+      drawLines('ground', null, SPEC.ink, .45, 1, 0, 0);
+      drawLines('campus', null, SPEC.ink, SPEC.campus.alpha * smooth(prog(t, S.start + .1, .4)), 1.2, 0, 0);
+      ctx.setLineDash([]);
+      drawDots();
+      drawWaveRing();
+      ctx.globalAlpha = 1;
+    }
     drawRail(t);
     drawTrains(t, now);
+    drawStopper();
     drawStation(t);
-    const shown = smooth(prog(t, SPEC.clock.start, SPEC.clock.fade));
-    if (shown > 0) {
+    /* 後半の始めに、時計・案内の文字と、その後ろを暗くする帯を消す。 */
+    const shown = smooth(prog(t, SPEC.clock.start, SPEC.clock.fade)) * (bend ? 1 - bend.ui : 1);
+    if (shown > 0 && boardKind) {
+      /* 発車案内の面は、左から右へ薄れる帯で地図を沈める。 */
+      const edge = boardRight + 220, g = ctx.createLinearGradient(0, 0, edge, 0);
+      g.addColorStop(0, rgb(SPEC.bg, .94 * shown)); g.addColorStop((boardRight + 20) / edge, rgb(SPEC.bg, .86 * shown)); g.addColorStop(1, rgb(SPEC.bg, 0));
+      ctx.fillStyle = g; ctx.fillRect(0, 0, edge, SPEC.H);
+    } else if (shown > 0) {
       /* 時計の後ろだけを暗くする。 */
       const [cx, cy, radius, squash] = SPEC.clock.backing;
       ctx.save(); ctx.translate(cx, cy); ctx.scale(1, squash);
@@ -597,12 +741,16 @@
       g.addColorStop(0, rgb(SPEC.bg, .93 * shown)); g.addColorStop(.62, rgb(SPEC.bg, .7 * shown)); g.addColorStop(1, rgb(SPEC.bg, 0));
       ctx.fillStyle = g; ctx.fillRect(-radius, -radius, radius * 2, radius * 2); ctx.restore();
     }
-    callout(world.school, t, SPEC.callout.school, world.school.name,
-      `${world.map.school.lat.toFixed(4)} N  ${world.map.school.lon.toFixed(4)} E  ${Math.round(world.map.school.z)} m`);
-    callout(world.station, t, SPEC.callout.station, world.station.name,
-      `${world.map.station.lat.toFixed(4)} N  ${world.map.station.lon.toFixed(4)} E  ${world.km.toFixed(2)} km`);
-    drawHud(t);
-    drawLock(t);
+    ctx.globalAlpha = bend ? 1 - smooth(prog(bend.k, 0, .3)) : 1;
+    if (ctx.globalAlpha > 0) {
+      callout(world.school, t, SPEC.callout.school, world.school.name,
+        `${world.map.school.lat.toFixed(4)} N  ${world.map.school.lon.toFixed(4)} E  ${Math.round(world.map.school.z)} m`);
+      callout(world.station, t, SPEC.callout.station, world.station.name,
+        `${world.map.station.lat.toFixed(4)} N  ${world.map.station.lon.toFixed(4)} E  ${world.km.toFixed(2)} km`);
+    }
+    ctx.globalAlpha = bend ? 1 - smooth(prog(bend.k, 0, .35)) : 1;
+    if (ctx.globalAlpha > 0) { drawHud(t); drawLock(t); }
+    ctx.globalAlpha = 1;
     return shown;
   }
 
@@ -638,7 +786,9 @@
     dateText.textContent = `${part('year')}.${part('month')}.${part('day')} ${part('weekday')}`;
     showLines(second);
   }
+  let lastNow = 0;
   function render(t, now) {
+    lastNow = now;
     showTime(now);
     const shown = draw(t, now);
     overlay.style.opacity = String(shown);
@@ -656,12 +806,19 @@
     skip = slow > 20 && !skip;
     if (skip) { showTime(Date.now() + offset); return; }
     const before = performance.now();
-    render((stamp - startedAt) / 1000, Date.now() + offset);
+    let t = (stamp - startedAt) / 1000;
+    if (outro && outro.t0 === null) outro.t0 = t;
+    /* 後半を流し終えたら、下線だけの最後のコマで止める。 */
+    if (outro && t >= outro.t0 + OUTRO_END) {
+      t = outro.t0 + OUTRO_END; cancelAnimationFrame(raf);
+      render(t, Date.now() + offset); outro.done = true; outro.resolve(); return;
+    }
+    render(t, Date.now() + offset);
     const cost = performance.now() - before;
     slow = cost > 13 ? Math.min(40, slow + 1) : Math.max(0, slow - 1);
   }
   function start() {
-    cancelAnimationFrame(raf); frozen = false; clockOn = false; shownSecond = -1;
+    cancelAnimationFrame(raf); frozen = false; clockOn = false; shownSecond = -1; outro = null; bend = null;
     startedAt = performance.now(); raf = requestAnimationFrame(tick);
   }
 
@@ -681,13 +838,14 @@
   }
 
   /* 運行情報と気象警報。1分ごとに取り直し、10分取れなければ古い内容は出さない。 */
-  const INFO = { every: 60000, stale: 600000, pageSize: 3, pageSeconds: 4 };
+  const INFO = { every: boardKind ? 30000 : 60000, stale: 600000, pageSize: 3, pageSeconds: 4 };
   const SAMPLE_WEATHER = {
     enabled: true, available: true, as_of: '07:30', area_count: 7, all_label: '7市すべて', unit: '市',
     warnings: [{ name: '暴風警報', level: 3, tone: 'l3', cities: ['寝屋川市', '枚方市', '交野市', '守口市', '門真市', '四條畷市', '大東市'] }],
     previews: [{ kind: 'soon', when: '昼過ぎから', name: '大雨警報', cities: ['寝屋川市', '枚方市'] }]
   };
-  const info = { ops: null, opsAt: 0, weather: null, weatherAt: 0, timer: 0, run: 0, rows: [], page: -1 };
+  const CALM_WEATHER = { enabled: true, available: true, warnings: [], previews: [] };
+  const info = { ops: null, opsAt: 0, weather: null, weatherAt: 0, board: null, boardAt: 0, timer: 0, run: 0, rows: [], page: -1 };
   const span = (className, text) => { const node = document.createElement('span'); if (className) node.className = className; node.textContent = text; return node; };
   const hhmm = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   function renderOps(groups) {
@@ -732,29 +890,155 @@
     fill.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
       { duration: total, delay: -(Math.max(0, second) % INFO.pageSeconds) * 1000, easing: 'linear', fill: 'both' });
   }
+
+  /* 発車案内。サイネージの交通情報の画面（index.html）と同じ言葉づかいで、1行に1本ずつ。 */
+  const KIND_BADGES = {
+    '普通': ['普通', '#222222', '#FFFFFF', '#A1A1A6'], '臨時列車': ['臨時', '#708090', '#FFFFFF'], '臨時': ['臨時', '#708090', '#FFFFFF'],
+    '区間急行': ['区急', '#008800', '#FFFFFF'], '準急': ['準急', '#006EFF', '#FFFFFF'], '通勤準急': ['通準', '#006EFF', '#FFFFFF'],
+    '急行': ['急行', '#FF8C00', '#FFFFFF'], '通勤急行': ['通急', '#FF8C00', '#FFFFFF'], '深夜急行': ['深急', '#FF8C00', '#FFFFFF'],
+    '快速急行': ['快急', '#800080', '#FFFFFF'], '通勤快急': ['通快', '#800080', '#FFFFFF'], '特急': ['特急', '#FF0000', '#FFFFFF'],
+    'ライナー': ['ライナー', '#FFFFFF', '#FF0000', '#FF0000'], '快速特急 洛楽': ['洛楽', '#FF8383', '#FFFFFF'], '快速特急': ['洛楽', '#FF8383', '#FFFFFF']
+  };
+  const node = (tag, className, text) => { const element = document.createElement(tag); if (className) element.className = className; if (text != null) element.textContent = text; return element; };
+  const withUnit = (className, text, unit) => { const element = node('span', className, text); if (unit) element.append(node('small', '', unit)); return element; };
+  const note = parts => { const element = node('span', 'board-note'); parts.filter(Boolean).forEach((part, index) => { if (index) element.append(node('i', '', '·')); element.append(typeof part === 'string' ? part : part); }); return element; };
+  const late = text => node('span', 'is-late', text);
+  /* 日本語でないエラー（例外の文字列など）はそのまま出さない。 */
+  const readable = (error, fallback) => error && /[ぁ-んァ-ヶ一-龠]/.test(error) ? error : fallback;
+  function remaining(minutes, word) {
+    const box = node('span', 'board-left');
+    if (word) box.append(node('em', '', word));
+    else box.append(node('small', '', 'あと'), node('b', '', String(minutes)), node('small', '', '分'));
+    return box;
+  }
+  function busRow(bus) {
+    const row = node('div', 'board-row');
+    const time = /(\d{1,2}:[0-5]\d)/.exec(bus.arrival_time || ''), destination = (bus.destination || '').replace(/^京阪香里園(?:行)?$/, '香里園').replace(/行$/, '');
+    row.append(time ? withUnit('board-time', time[1].padStart(5, '0'), '発') : node('span', 'board-time is-pending', '—'));
+    const dest = node('span', 'board-dest'), name = node('b', '', destination); name.append(node('small', '', '行'));
+    const delayed = bus.delay_minutes > 0;
+    dest.append(name, note([
+      bus.scheduled_time && `定刻 ${bus.scheduled_time}`,
+      bus.delay_text ? (delayed ? late(bus.delay_text) : bus.delay_text) : bus.scheduled_time && '遅れ情報なし',
+      bus.terminal_arrival_time && `終点 ${bus.terminal_arrival_time}着${bus.terminal_arrival_is_estimated ? '（推定）' : ''}`
+    ]));
+    const match = /^(?:あと|約)?(?:(\d+)時間)?(?:(\d+)分)?後?(?:に到着)?$/.exec(bus.status || '');
+    const minutes = match && (match[1] || match[2]) ? Number(match[1] || 0) * 60 + Number(match[2] || 0) : null;
+    row.append(dest, bus.stop_arrival_is_scheduled ? remaining(null, '定刻') : minutes !== null ? remaining(minutes) : remaining(null, (bus.status || '—').replace(/に?到着$/, '') || '—'));
+    row.setAttribute('aria-label', `${time ? time[1] + '発' : '時刻不明'} ${destination}行き ${bus.status || ''}`);
+    return row;
+  }
+  function trainDelay(train) {
+    if (train.delay >= 120 || train.status === '遅れ2時間以上') return '2時間以上遅れ';
+    return train.delay ? `${train.delay}分遅れ` : '';
+  }
+  function trainRow(train) {
+    const row = node('div', 'board-row'), style = KIND_BADGES[train.kind] || KIND_BADGES["普通"];
+    const kind = node('span', 'board-kind', style[0]);
+    kind.style.background = style[1]; kind.style.color = style[2]; if (style[3]) kind.style.border = `2px solid ${style[3]}`;
+    const delay = trainDelay(train), unsure = train.estimate_unreliable || !Number.isFinite(train.minutes_remaining);
+    const dest = node('span', 'board-dest'), name = node('b', '', train.destination || ''); name.append(node('small', '', '行'));
+    const stopped = Number.isFinite(train.stopped_minutes) ? `${train.stopped_minutes}分停止` : '';
+    /* 到着予測が立たないときは、遅れを右の大きな欄に出す。 */
+    dest.append(name, note([
+      !unsure && delay && late(delay), stopped && late(stopped),
+      train.estimate_unreliable ? (train.position_text || train.position || '').replace(/（[^）]*）$/, '')
+        : train.sub_station_time && `${train.sub_station_name} ${train.sub_station_time}${train.sub_station_verb || ''}`
+    ]));
+    let left;
+    if (train.is_this_station) left = remaining(null, '停車中');
+    else if (unsure) { left = remaining(null, delay || '—'); if (delay) left.firstChild.className = 'is-late'; }
+    else if (train.minutes_remaining <= 0) left = remaining(null, 'まもなく');
+    else left = remaining(train.minutes_remaining);
+    row.append(kind, withUnit('board-time', train.time || '—', ''), dest, left);
+    row.setAttribute('aria-label', `${train.kind} ${train.time}発 ${train.destination}行き ${delay}`);
+    return row;
+  }
+  function boardColumn(title, sub, rows, empty) {
+    const column = node('div', 'board-col'), list = node('div', 'board-rows');
+    if (title) { const head = node('div', 'board-col-head', title); if (sub) head.append(node('span', '', sub)); column.append(head); }
+    if (rows.length) list.append(...rows); else list.append(node('div', 'board-empty', empty));
+    column.append(list);
+    return column;
+  }
+  function renderBoard(data) {
+    if (!boardList) return;
+    if (!data) {
+      boardList.replaceChildren(boardColumn('', '', [], boardKind === 'bus' ? 'バスの情報を取得できていません' : '列車の情報を取得できていません'));
+    } else if (boardKind === 'bus') {
+      const name = root.querySelector('[data-board=name]'), stop = data.buses?.find(bus => bus.stop_name)?.stop_name;
+      if (stop && name.firstChild.textContent !== stop) name.firstChild.textContent = stop;
+      boardList.replaceChildren(boardColumn('', '', (data.buses || []).slice(0, 8).map(busRow), data.error ? readable(data.error, 'バスの情報を取得できていません') : 'いまはバスの情報がありません'));
+    } else {
+      const name = root.querySelector('[data-board=name]');
+      if (data.station_name && name.firstChild.textContent !== data.station_name) name.firstChild.textContent = data.station_name;
+      const empty = data.error ? readable(data.error, '列車の情報を取得できていません') : '表示できる列車がありません';
+      const pick = list => (list || []).filter(train => !train.is_this_station).slice(0, 6).map(trainRow);
+      boardList.replaceChildren(boardColumn('京都方面', '出町柳・三条', data.error ? [] : pick(data.up_trains), empty),
+        boardColumn('大阪方面', '淀屋橋・中之島', data.error ? [] : pick(data.down_trains), empty));
+    }
+    /* 入りきらない行は、途中で切れて見えないように丸ごと隠す。 */
+    const limit = boardList.clientHeight;
+    boardList.querySelectorAll('.board-row').forEach(row => { row.hidden = row.offsetTop - boardList.offsetTop + row.offsetHeight > limit; });
+  }
   function showInfo() {
     const now = Date.now();
     renderOps(now - info.opsAt <= INFO.stale ? info.ops : null);
     if (window.renderWeather) window.renderWeather(weatherBox, now - info.weatherAt <= INFO.stale ? info.weather : null);
+    /* 案内の行数は、警報と運行情報の高さが決まってから合わせる。 */
+    if (boardKind) renderBoard(now - info.boardAt <= INFO.stale ? info.board : null);
     root.querySelectorAll('.clock-info').forEach(box => box.classList.remove('is-waiting'));
   }
   const getJson = url => fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15000) }).then(response => { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); });
   async function loadInfo() {
     const run = ++info.run, sample = infoSelect.value === 'sample';
     clearTimeout(info.timer);
-    const catalog = base.slice(0, base.lastIndexOf('/'));
-    const [ops, weather] = await Promise.allSettled(sample
-      ? [getJson(catalog + '/severe-weather/data').then(data => data.delays), Promise.resolve(SAMPLE_WEATHER)]
-      : [getJson('/transit/api/delays'), getJson('/transit/api/weather')]);
+    const catalog = base.slice(0, base.lastIndexOf('/')), key = boardKind === 'bus' ? 'buses' : 'trains';
+    let requests;
+    if (infoSelect.value === 'live') {
+      requests = [getJson('/transit/api/delays'), getJson('/transit/api/weather'), boardKind ? getJson('/transit/api/' + key) : null];
+    } else {
+      /* 想定の日は、デモの記録（荒天の日・平常の日）から取る。 */
+      const scene = getJson(catalog + (sample ? '/severe-weather/data' : '/normal/data'));
+      requests = [scene.then(data => data.delays), Promise.resolve(sample ? SAMPLE_WEATHER : CALM_WEATHER), boardKind ? scene.then(data => data[key]) : null];
+    }
+    const [ops, weather, board] = await Promise.allSettled(requests.map(request => request || Promise.resolve(null)));
     if (run !== info.run) return;
+    if (board.status === 'fulfilled' && board.value) { info.board = board.value; info.boardAt = Date.now(); }
     if (ops.status === 'fulfilled' && ops.value && ops.value.groups) { info.ops = ops.value.groups; info.opsAt = Date.now(); }
     if (weather.status === 'fulfilled' && weather.value) { info.weather = weather.value; info.weatherAt = Date.now(); }
-    showInfo();
-    info.timer = setTimeout(loadInfo, INFO.every);
+    /* 描画で例外が出ても次の取得は予約する（予約が後ろにあると、1回の例外で更新が止まったままになる）。 */
+    try { showInfo(); } finally { info.timer = setTimeout(loadInfo, INFO.every); }
   }
-  infoSelect.addEventListener('change', () => { info.ops = info.weather = null; info.opsAt = info.weatherAt = 0; loadInfo(); });
+  infoSelect.addEventListener('change', () => { info.ops = info.weather = info.board = null; info.opsAt = info.weatherAt = info.boardAt = 0; loadInfo(); });
+
+  /* 下線の位置は、端末が裏で読み込んだ交通情報の画面で測ったもの（端末の画面の座標）。この canvas の座標に直す。
+     届かないときは 1920×1080 の交通情報の画面の値を使う。 */
+  function outroGeo(rule) {
+    if (!rule || !(rule.right > rule.left) || !Number.isFinite(rule.y)) return { ruleLeft: 56, ruleRight: SPEC.W - 56, ruleY: 172.5, width: 1 };
+    const box = stage.getBoundingClientRect();
+    const x0 = box.left + (stage.clientWidth - SPEC.W * scale) / 2, y0 = box.top + (stage.clientHeight - SPEC.H * scale) / 2;
+    return { ruleLeft: (rule.left - x0) / scale, ruleRight: (rule.right - x0) / scale, ruleY: (rule.y - y0) / scale, width: (rule.scale || scale) / scale };
+  }
+  function playOutro(rule) {
+    if (outro) return outro.promise;
+    let resolve; const promise = new Promise(done => { resolve = done; });
+    outro = { t0: null, geo: outroGeo(rule), done: false, resolve, promise };
+    return promise;
+  }
+  /* 端末（display.html）から、交通情報の画面へ切り替える合図が来たら後半を流し、終わったら知らせる。 */
+  window.addEventListener('message', event => {
+    if (window.parent === window || event.source !== window.parent || event.origin !== location.origin || event.data?.type !== 'signage:outro') return;
+    const reply = state => window.parent.postMessage({ type: 'signage:outro', state }, location.origin);
+    if (!ready || frozen || document.hidden) { reply('unavailable'); return; }
+    playOutro(event.data.rule).then(() => reply('done'));
+  });
 
   const resize = () => {
+    const changed = layout();
+    /* 案内の面の高さが変わったら、入りきる行数を数え直す。止めて描いている（renderAt）ときは描き直す。 */
+    if (changed && boardKind && info.boardAt) renderBoard(Date.now() - info.boardAt <= INFO.stale ? info.board : null);
+    if (changed && frozen && ready) render(Number(stage.dataset.time) || 0, lastNow);
     scale = Math.min(stage.clientWidth / SPEC.W, stage.clientHeight / SPEC.H);
     const x = (stage.clientWidth - SPEC.W * scale) / 2, y = (stage.clientHeight - SPEC.H * scale) / 2;
     const transform = `translate(${x}px,${y}px) scale(${scale})`;
@@ -764,13 +1048,18 @@
   root.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => {
     if (!ready) return;
     if (button.dataset.action === 'restart') start();
+    /* デモ: 交通情報の画面へ切り替えるときの後半を流し、少し置いてから立ち上げに戻る。 */
+    if (button.dataset.action === 'outro' && !outro) playOutro(null).then(() => setTimeout(() => { if (outro?.done) start(); }, 1500));
     if (button.dataset.action === 'fullscreen') (document.fullscreenElement ? document.exitFullscreen() : stage.requestFullscreen()).catch(() => {});
   }));
   root.clock = {
     /* 確認用: 読み込んでからの秒数と時刻（ミリ秒）を指定して1コマだけ描く。 */
     renderAt(t, now) { if (!ready) return; cancelAnimationFrame(raf); frozen = true; offset = 0; shownSecond = -1; render(t, now); },
+    /* 確認用: 後半を始めてから u 秒のコマを描く（rule は端末の画面の座標の下線。省くと 1920×1080 の値）。 */
+    renderOutroAt(u, t, now, rule) { if (!ready) return; outro = { t0: t - u, geo: outroGeo(rule), done: false, resolve() {}, promise: null }; this.renderAt(t, now); },
+    outro: rule => playOutro(rule), get outroEnd() { return OUTRO_END; },
     start, get ready() { return ready; }, get camera() { return { ...cam }; },
-    showInfo(ops, weather) { clearTimeout(info.timer); info.run++; info.ops = ops; info.weather = weather; info.opsAt = info.weatherAt = Date.now(); showInfo(); }
+    showInfo(ops, weather, board) { clearTimeout(info.timer); info.run++; info.ops = ops; info.weather = weather; info.board = board || null; info.opsAt = info.weatherAt = info.boardAt = Date.now(); showInfo(); }
   };
 
   const base = location.pathname.replace(/\/$/, '');

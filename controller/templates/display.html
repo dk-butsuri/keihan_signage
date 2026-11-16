@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>サイネージ</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0B0B0C}iframe{width:100%;height:100%;border:0;display:block}[hidden]{display:none!important}#reconnecting-screen{position:fixed;inset:0;z-index:9999;background:#0B0B0C;overflow:hidden}#reconnecting-content{position:absolute;left:0;top:0;transform-origin:top left}@keyframes spin{to{transform:rotate(360deg)}}.attempt{display:flex;align-items:center;gap:20px;height:34px;font-size:19px;line-height:1}.attempt-detail{color:#A1A1A6;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1}
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>サイネージ</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0B0B0C}iframe{width:100%;height:100%;border:0;display:block}iframe.next{position:fixed;inset:0;opacity:0;pointer-events:none}[hidden]{display:none!important}#reconnecting-screen{position:fixed;inset:0;z-index:9999;background:#0B0B0C;overflow:hidden}#reconnecting-content{position:absolute;left:0;top:0;transform-origin:top left}@keyframes spin{to{transform:rotate(360deg)}}.attempt{display:flex;align-items:center;gap:20px;height:34px;font-size:19px;line-height:1}.attempt-detail{color:#A1A1A6;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;flex:1}
 #clock-time, #clock-seconds { display:inline-flex; flex-shrink:0; letter-spacing:0; white-space:nowrap; }
 .clock-digit { display:inline-block; flex:0 0 .58em; width:.58em; text-align:center; }
 .clock-separator { display:inline-block; flex:0 0 .22em; width:.22em; text-align:center; }
@@ -75,9 +75,64 @@ function scaleScreen() {
     content.style.top=Math.max(0,(innerHeight-height*scale)/2)+'px';
 }
 window.addEventListener('resize',scaleScreen);scaleScreen();
-function setMode(mode) {
-    if (mode === currentMode || !['transit','clock'].includes(mode)) return;
-    currentMode=mode;$('f').src='/'+mode+'/';
+// 列車とバスの片方だけがオンのときは、交通情報の代わりにその発車案内の画面を出す
+function screenPath(mode, view) {
+    return mode==='transit' && (view==='bus' || view==='train') ? '/transit/board/'+view+'/' : '/'+mode+'/';
+}
+var currentPath = '/transit/';
+// 時計・バス・電車の「測量」から交通情報の画面へ切り替えるときは、起動イントロ「測量」の後半でつなぐ。
+// 交通情報の画面を裏の iframe（handoff）で読み込み、準備ができたら「測量」の画面に後半（準急が香里園に止まり、
+// 真上へ回り込んで線路が見出しの下線になる）を流させる。終わったら交通情報の画面に組み上げを始めさせ、
+// 始まった瞬間に入れ替える。どこかで返事が来なければ、そのまま入れ替える。
+const ATLAS_PATHS=['/clock/','/transit/board/bus/','/transit/board/train/'];
+const HANDOFF_LIMIT_MS=20000, OUTRO_LIMIT_MS=8000;
+var handoff = null;
+function handoffAllowed(from, to) {
+    return to==='/transit/' && ATLAS_PATHS.includes(from) && $('reconnecting-screen').hidden && !document.hidden
+        && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+function startHandoff(path) {
+    const frame=document.createElement('iframe');
+    frame.className='next';frame.setAttribute('aria-hidden','true');frame.src=path+'?handoff=atlas';
+    $('f').after(frame);
+    handoff={frame,outro:false,timer:setTimeout(finishHandoff,HANDOFF_LIMIT_MS),outroTimer:null};
+}
+function cancelHandoff() {
+    if(!handoff)return;
+    clearTimeout(handoff.timer);clearTimeout(handoff.outroTimer);handoff.frame.remove();handoff=null;
+}
+function releaseHandoff() {
+    if(!handoff)return;
+    clearTimeout(handoff.outroTimer);
+    handoff.frame.contentWindow?.postMessage({type:'signage:handoff-go'},location.origin);
+}
+function finishHandoff() {
+    if(!handoff)return;
+    const {frame,timer,outroTimer}=handoff;handoff=null;clearTimeout(timer);clearTimeout(outroTimer);
+    const old=$('f');old.removeAttribute('id');
+    frame.id='f';frame.className='';frame.removeAttribute('aria-hidden');old.remove();
+}
+window.addEventListener('message',event=>{
+    if(!handoff||event.origin!==location.origin)return;
+    const data=event.data||{};
+    if(event.source===handoff.frame.contentWindow && data.type==='signage:handoff') {
+        if(data.state==='ready' && !handoff.outro) {
+            handoff.outro=true;
+            $('f').contentWindow?.postMessage({type:'signage:outro',rule:data.rule},location.origin);
+            handoff.outroTimer=setTimeout(releaseHandoff,OUTRO_LIMIT_MS);
+        } else if(['running','completed','skipped'].includes(data.state)) finishHandoff();
+    } else if(event.source===$('f').contentWindow && data.type==='signage:outro' && ['done','unavailable'].includes(data.state)) {
+        releaseHandoff();
+    }
+});
+function setMode(mode, view) {
+    if (!['transit','clock'].includes(mode)) return;
+    const path=screenPath(mode, view);
+    if (path === currentPath) return;
+    const from=currentPath;
+    cancelHandoff();
+    currentMode=mode;currentPath=path;
+    if(handoffAllowed(from, path))startHandoff(path);else $('f').src=path;
     lastOk=Date.now();firstFailure=null;failures=0;attempts=[];
     $('reconnecting-screen').hidden=true;
 }
@@ -145,7 +200,7 @@ async function healthCheck() {
             const reconnecting=!$('reconnecting-screen').hidden;
             lastOk=Date.now();firstFailure=null;failures=0;attempts=[];
             $('reconnecting-screen').hidden=true;
-            if(reconnecting)$('f').src='/'+currentMode+'/';
+            if(reconnecting){cancelHandoff();$('f').src=currentPath;}
         } else {
             let detail=response.statusText;
             try {const data=await response.json();if(typeof data.detail==='string')detail=data.detail;} catch(error) {if(controller.signal.aborted)throw error;}
@@ -155,9 +210,30 @@ async function healthCheck() {
         if(mode===currentMode)recordFailure('—',controller.signal.aborted?'応答なし（10秒でタイムアウト）':'接続できません');
     } finally {clearTimeout(timer);checkInFlight=false;updateDisplay();}
 }
-fetch('/api/mode').then(r=>r.json()).then(data=>setMode(data.mode)).catch(()=>{});
-const events=new EventSource('/api/mode/stream?client=display');
-events.onmessage=event=>{try{setMode(JSON.parse(event.data).mode);}catch(error){}};
+// 新しい版を反映したら（build が変わったら）、端末の画面をまるごと読み直す
+var loadedBuild = null;
+function checkBuild(data) {
+    if (!data.build) return;
+    if (loadedBuild === null) { loadedBuild = data.build; return; }
+    if (data.build !== loadedBuild) location.reload();
+}
+fetch('/api/mode').then(r=>r.json()).then(data=>{checkBuild(data);setMode(data.mode,data.transit_view);}).catch(()=>{});
+// 途中の Cloudflare がエラーを返すと、ブラウザは EventSource をつなぎ直さなくなる。
+// 黙って途切れた接続にも気づけるよう、サーバーは25秒ごとに ping を送り、90秒届かなければつなぎ直す
+const EVENTS_SILENCE_MS=90000;
+var events=null,lastEventAt=0;
+function connectEvents() {
+    if(events)events.close();
+    lastEventAt=Date.now();
+    events=new EventSource('/api/mode/stream?client=display');
+    events.onmessage=event=>{lastEventAt=Date.now();try{const data=JSON.parse(event.data);checkBuild(data);setMode(data.mode,data.transit_view);}catch(error){}};
+    events.addEventListener('ping',()=>{lastEventAt=Date.now();});
+}
+connectEvents();
+setInterval(()=>{
+    if(events.readyState===EventSource.CLOSED || Date.now()-lastEventAt>EVENTS_SILENCE_MS)connectEvents();
+},CHECK_INTERVAL_MS);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).catch(()=>{});
 setTimeout(()=>{healthCheck();setInterval(healthCheck,CHECK_INTERVAL_MS);},5000);
 setInterval(updateDisplay,1000);updateDisplay();
 

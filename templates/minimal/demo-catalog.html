@@ -5,30 +5,56 @@
 <title>デモを選ぶ · 京阪サイネージ</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;display=swap">
 <style>
-*{box-sizing:border-box}body{margin:0;background:#0B0B0C;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif;line-height:1.8}main{max-width:1160px;margin:auto;padding:40px 32px 48px}.eyebrow{font-size:15px;color:#A1A1A6;letter-spacing:.12em}h1{margin:12px 0;font-size:36px;font-weight:500;line-height:1.4}header>p{margin:0;color:#A1A1A6;font-size:18px}section{margin-top:32px}h2{font-size:20px;font-weight:500;margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.card{color:inherit;text-decoration:none;display:flex;flex-direction:column;gap:10px;padding:22px 26px;background:#151517;border:1px solid #26262A;border-radius:8px;transition:border-color .15s,background .15s}.card:hover{background:#1B1B1F;border-color:#7C7C82}.card:focus-visible{outline:3px solid #F1F1EE;outline-offset:4px}.tag{align-self:flex-start;font-size:13px;line-height:1.5;border:1px solid #4A4A50;border-radius:4px;padding:2px 8px;color:#A1A1A6}.recorded .tag{border-color:#476480;color:#A7CEE8}.card h3{font-weight:500;font-size:22px;line-height:1.4;margin:0}.card p{font-size:15.5px;line-height:1.6;color:#A1A1A6;margin:0}.open{font-size:14px;line-height:1.5;color:#D9D9D6;margin-top:auto;padding-top:0}.recorded{grid-column:1/-1}.card[aria-disabled=true]{pointer-events:none;opacity:.55}.spec{display:inline-block;margin-top:14px;color:#A7CEE8;font-size:16px;text-decoration:none;border-bottom:1px solid #476480}.spec:hover{color:#F1F1EE;border-color:#F1F1EE}.spec:focus-visible{outline:3px solid #F1F1EE;outline-offset:4px}.note{margin:24px 0 0;color:#7C7C82;font-size:14px}@media(max-width:680px){main{padding:32px 20px 48px}h1{font-size:32px}header>p{font-size:16px}.grid{grid-template-columns:1fr}.card{padding:24px}.card h3{font-size:22px}section{margin-top:32px}}
-</style>
-<style>
-@media(min-width:681px){.catalog-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}.catalog-section.static{grid-column:1/-1}.catalog-section.replay .grid,.catalog-section.gallery .grid{grid-template-columns:1fr}}
-@media(min-width:1200px){main{max-width:1320px}.catalog-sections{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}.catalog-section.gallery .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+*{box-sizing:border-box}
+body{margin:0;background:#0B0B0C;color:#F1F1EE;font-family:'Zen Kaku Gothic New',sans-serif;line-height:1.6}
+main{max-width:1320px;margin:auto;padding:40px 32px 56px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px 32px;flex-wrap:wrap;padding-bottom:28px;border-bottom:1px solid #26262A}
+.eyebrow{font-size:13px;color:#7C7C82;letter-spacing:.14em}
+h1{margin:6px 0 4px;font-size:34px;font-weight:500;line-height:1.3}
+header p{margin:0;color:#A1A1A6;font-size:16px}
+.spec{flex-shrink:0;color:#A7CEE8;font-size:15px;text-decoration:none;border:1px solid #476480;border-radius:6px;padding:10px 16px;line-height:1}
+.spec:hover{color:#F1F1EE;border-color:#A7CEE8}
+section{margin-top:40px}
+.section-head{display:flex;align-items:baseline;gap:6px 16px;flex-wrap:wrap;margin-bottom:18px}
+h2{font-size:21px;font-weight:500;margin:0;line-height:1.3}
+.section-head p{margin:0;color:#7C7C82;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:24px 20px}
+.card{color:inherit;text-decoration:none;display:flex;flex-direction:column;border-radius:8px;outline-offset:4px}
+.thumb{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#151517;border:1px solid #26262A;transition:border-color .15s,transform .15s}
+.thumb img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}
+.thumb .tag{position:absolute;left:10px;top:10px;font-size:12px;line-height:1;padding:5px 8px;border-radius:4px;background:rgba(11,11,12,.82);color:#D9D9D6;backdrop-filter:blur(4px)}
+.recorded .tag{color:#A7CEE8}
+.card:hover .thumb{border-color:#7C7C82;transform:translateY(-2px)}
+.card:focus-visible{outline:3px solid #F1F1EE}
+.card h3{font-weight:500;font-size:18px;line-height:1.4;margin:12px 0 2px}
+.card p{font-size:14px;line-height:1.55;color:#A1A1A6;margin:0}
+.card[aria-disabled=true]{pointer-events:none;opacity:.5}
+.note{margin:44px 0 0;color:#7C7C82;font-size:13px}
+@media(max-width:680px){main{padding:28px 16px 48px}h1{font-size:28px}.grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:20px 12px}.card h3{font-size:16px;margin-top:8px}.card p{font-size:13px}.thumb .tag{display:none}section{margin-top:36px}}
+@media(prefers-reduced-motion:reduce){.thumb{transition:none}.card:hover .thumb{transform:none}}
 </style>
 </head>
 <body><main>
-<header><div class="eyebrow">京阪サイネージ / DEMO</div><h1>デモを選ぶ</h1><p>実際の記録の再生と、状況を想定した表示を試せます。</p><a class="spec" id="spec-link" href="/demo/readme">仕様書を読む →</a></header>
-<div class="catalog-sections">
-{% for mode, heading in [('replay', '実際の記録'), ('gallery', '表示の見本'), ('static', '状況を想定した表示')] %}
-<section class="catalog-section {{ mode }}" aria-label="{{ heading }}"><h2>{{ heading }}</h2><div class="grid">
-{% for demo in demos if demo.mode == mode or (mode == 'gallery' and demo.mode in ('intro', 'chime', 'clock', 'weather', 'playground')) %}
-<a class="card {{ 'recorded' if mode == 'replay' else '' }}" data-demo-id="{{ demo.id }}" href="/demo/{{ demo.id }}" {% if not demo.available %}aria-disabled="true" tabindex="-1"{% endif %}>
-<span class="tag">{{ '時報アニメーション' if demo.mode == 'chime' else '時計の画面' if demo.mode == 'clock' else '起動アニメーション' if demo.mode == 'intro' else '操作して試す' if demo.mode in ('weather', 'playground') else '実記録 · 時間を動かして再生' if mode == 'replay' else '表示パターン一覧' if mode == 'gallery' else '架空の想定 · 表示のみ' }}</span>
-<h3>{{ demo.title }}</h3><p>{{ demo.description }}</p><span class="open">{{ 'デモを開く →' if demo.available else '記録を準備中' }}</span>
+<header><div><div class="eyebrow">京阪サイネージ / DEMO</div><h1>デモを選ぶ</h1><p>本番の画面と、さまざまな運行状況での見え方を試せます。</p></div><a class="spec" id="spec-link" href="/demo/readme">仕様書を読む →</a></header>
+{% set groups = [
+  ('signage', 'サイネージの画面', '交通情報の代わりに出す画面', ('clock',)),
+  ('motion', '演出', '起動したときと、正時の時報', ('chime', 'intro')),
+  ('static', '状況を想定した表示', '架空の運行状況で、交通情報の画面を確かめる', ('static',)),
+  ('tools', '記録としくみ', '実際の記録の再生と、表示を試す道具', ('replay', 'playground', 'weather', 'gallery')),
+] %}
+{% for key, heading, lead, modes in groups %}
+<section class="catalog-section {{ key }}" aria-labelledby="h-{{ key }}"><div class="section-head"><h2 id="h-{{ key }}">{{ heading }}</h2><p>{{ lead }}</p></div><div class="grid">
+{% for mode in modes %}{% for demo in demos if demo.mode == mode %}
+<a class="card {{ 'recorded' if mode == 'replay' else '' }}" data-demo-id="{{ demo.id }}" data-mode="{{ demo.mode }}" href="/demo/{{ demo.id }}" title="{{ demo.description }}" {% if not demo.available %}aria-disabled="true" tabindex="-1"{% endif %}>
+<span class="thumb"><img src="{{ demo.id }}/thumb.jpg" alt="" loading="lazy" width="640" height="360" onerror="this.remove()"><span class="tag">{{ '時報' if demo.mode == 'chime' else ('発車案内' if demo.board else '時計') if demo.mode == 'clock' else '起動演出' if demo.mode == 'intro' else '操作して試す' if demo.mode in ('weather', 'playground') else '実記録 · 再生' if demo.mode == 'replay' else '表示パターン' if demo.mode == 'gallery' else '架空の想定' }}</span></span>
+<h3>{{ demo.title }}</h3><p>{{ demo.summary if demo.available else '記録を準備中' }}</p>
 </a>
-{% endfor %}
+{% endfor %}{% endfor %}
 </div></section>
 {% endfor %}
-</div>
 <p class="note">想定デモの運行状況・時刻は架空です。実際の運行情報は、本番のサイネージで確認してください。</p>
 </main><script>
 const demoRoot=location.pathname.replace(/\/$/,'');
-for(const link of document.querySelectorAll('[data-demo-id]'))link.href=demoRoot+'/'+link.dataset.demoId;
+for(const link of document.querySelectorAll('[data-demo-id]')){link.href=demoRoot+'/'+link.dataset.demoId;link.querySelector('img')?.setAttribute('src',demoRoot+'/'+link.dataset.demoId+'/thumb.jpg');}
 document.getElementById('spec-link').href=demoRoot+'/readme';
 </script></body></html>

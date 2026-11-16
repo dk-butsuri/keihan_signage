@@ -4,14 +4,19 @@ const config = {{ config | tojson }};
 const openingAssembly={settled:new Set(),failed:new Set(),timer:null};
 const openingAllowed=!config.demo&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&new URLSearchParams(location.search).get('motion')!=='off';
 document.documentElement.dataset.assembly=openingAllowed?'pending':'skipped';
+// 端末が「測量」の画面から切り替えるときは、裏で読み込まれて合図を待つ（opening.js）。待つあいだがあるので、あきらめるまでを長くする
+const openingHandoff=new URLSearchParams(location.search).get('handoff')==='atlas'&&window.parent!==window;
+function openingSkipped() {
+    if(openingHandoff)window.parent.postMessage({type:'signage:handoff',state:'skipped'},location.origin);
+}
 if(openingAllowed) {
     document.documentElement.classList.add('assembly-pending');
     openingAssembly.timer=setTimeout(()=>{
         if(document.documentElement.dataset.assembly!=='pending')return;
         document.documentElement.dataset.assembly='skipped';document.documentElement.classList.remove('assembly-pending');
-        document.dispatchEvent(new Event('signage:assembly-cancel'));
-    },2000);
-}
+        document.dispatchEvent(new Event('signage:assembly-cancel'));openingSkipped();
+    },openingHandoff?20000:2000);
+} else openingSkipped();
 </script>
 <style>html.assembly-pending #screen{visibility:hidden}</style>
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0B0B0C}#screen{transform-origin:top left}[hidden]{display:none!important}@keyframes spin{to{transform:rotate(360deg)}}.delay-list{flex:1;min-height:0;overflow:hidden}.empty{font-size:20px;color:#A1A1A6;padding:24px 0;overflow-wrap:anywhere}.line-label{position:absolute;display:flex;flex-direction:column;align-items:center;line-height:1;white-space:nowrap;background:#0B0B0C}.line-kind{min-width:40px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:3px;font-size:14px;font-weight:700}.line-delay{margin-top:4px;font-size:17px;line-height:18px}.line-stopped{margin-top:3px;font-size:14px;font-weight:700;color:#FF5B2E;line-height:18px}.map-station{position:absolute;text-align:center;color:#A1A1A6;line-height:1;font-size:16px}.map-outside{position:absolute;font-size:16px;color:#7C7C82;line-height:1;white-space:nowrap}
@@ -936,8 +941,7 @@ function clockTick(timestamp=displayTime()) {
 let clockTimer=null;
 function clockLoop() {
     const now=Date.now()+clockOffset, second=Math.floor((now+15)/1000)*1000;
-    clockTick(second);
-    clockTimer=setTimeout(clockLoop,second+1000-now);
+    try { clockTick(second); } finally { clockTimer=setTimeout(clockLoop,second+1000-now); }
 }
 // 同時に投げると互いの往復を遅らせるので、1回ずつ順に測る
 async function clockSync() {
@@ -979,17 +983,20 @@ async function api(name) {
         reconnectBadge();
     }
 }
+// 描画で例外が出ても次の予約は必ず入れる（予約が描画の後ろにあると、1回の例外でその欄の更新が止まったままになる）
 async function fetchTrains() {
-    const [trains,line]=await Promise.all([api('trains'),api('line')]);
-    if(trains)trainData=trains;if(line)lineData=line;render();
-    setTimeout(fetchTrains,failedEndpoints.has('trains')||failedEndpoints.has('line')?15000:60000);
+    try {
+        const [trains,line]=await Promise.all([api('trains'),api('line')]);
+        if(trains)trainData=trains;if(line)lineData=line;render();
+    } finally { setTimeout(fetchTrains,failedEndpoints.has('trains')||failedEndpoints.has('line')?15000:60000); }
 }
 async function fetchBuses() {
-    const data=await api('buses');if(data)busData=data;renderBuses();
-    setTimeout(fetchBuses,failedEndpoints.has('buses')?15000:120000);
+    try { const data=await api('buses');if(data)busData=data;renderBuses(); }
+    finally { setTimeout(fetchBuses,failedEndpoints.has('buses')?15000:120000); }
 }
 async function fetchDelays() {
-    const data=await api('delays');if(data)delayData=data;renderDelays();setTimeout(fetchDelays,120000);
+    try { const data=await api('delays');if(data)delayData=data;renderDelays(); }
+    finally { setTimeout(fetchDelays,120000); }
 }
 let weatherData=null,lastWeatherSuccess=0;
 async function fetchWeather() {
@@ -999,8 +1006,8 @@ async function fetchWeather() {
     } catch(error) {}
     // 取得できない状態が続いたら、古い警報を出し続けないよう札を消す
     if(Date.now()-lastWeatherSuccess>600000)weatherData=null;
-    if(window.renderWeather)window.renderWeather($('weather'),weatherData);
-    setTimeout(fetchWeather,60000);
+    try { if(window.renderWeather)window.renderWeather($('weather'),weatherData); }
+    finally { setTimeout(fetchWeather,60000); }
 }
 document.fonts.ready.then(render);
 clockTick();
@@ -1026,11 +1033,12 @@ if(document.documentElement.dataset.assembly==='pending') {
         doc:document,boot:openingAssembly,
         required:[...(enabled('trains')?['trains','line']:[]),...(enabled('buses')?['buses']:[]),...(enabled('delays')?['delays']:[])],
         critical:enabled('trains')?['trains','line']:[],
-        hasError:()=>[trainData,lineData].some(data=>data?.error)
+        hasError:()=>[trainData,lineData].some(data=>data?.error),
+        handoff:openingHandoff
     })).catch(()=>{
         clearTimeout(openingAssembly.timer);document.documentElement.dataset.assembly='skipped';
         document.documentElement.classList.remove('assembly-pending');
-        document.dispatchEvent(new Event('signage:assembly-cancel'));
+        document.dispatchEvent(new Event('signage:assembly-cancel'));openingSkipped();
     });
 }
 if(!config.demo&&new URLSearchParams(location.search).get('motion')!=='off') {
