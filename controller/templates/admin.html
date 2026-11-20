@@ -462,9 +462,8 @@ $('save-raw').onclick=async()=>{
 };
 
 /* 季節の装飾 */
-const SEASON_LABEL={christmas:'クリスマス',shogatsu:'正月',shinshun:'新春',valentine:'バレンタイン'};
 let seasons={override:null,periods:[],active:null};
-function seasonName(id){return SEASON_LABEL[id]||id;}
+function seasonName(id){const p=seasons.periods.find(p=>p.id===id);return p?p.label:id;}
 function renderSeasons(){
   $('season-active').textContent=seasons.active?`いま出ている装飾: ${seasonName(seasons.active)}`:'いまは出していません';
   const ids=[...new Set(seasons.periods.map(p=>p.id))];

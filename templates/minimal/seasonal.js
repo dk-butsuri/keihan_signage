@@ -1,6 +1,7 @@
 // 季節の装飾の読み込み役。どの装飾を出すかは端末（controller）が決めて知らせてくる。
 // 装飾は #screen の中の2枚の層（文字の後ろ・文字の前）にだけ描き、案内そのものには触れない。
 // 見合わせ時の画面と警報（レベル3以上）のあいだ、起動の組み上げと時報のあいだは層ごと隠す。
+// 装飾の作り方・決まりごとは docs/DEVELOPMENT.md の「季節の装飾」。
 (() => {
   const root = document.documentElement;
   const base = new URL('seasons/', document.currentScript.src).href;
@@ -9,15 +10,22 @@
   const themes = {};
   let wanted = '', link = null, layers = [], cleanup = null;
 
+  // 装飾を見せてよいときだけ html に data-season-visible を付ける。装飾の CSS（カードの色など）はこの印だけを見る
   const style = document.createElement('style');
-  style.textContent = '.season-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;transition:opacity .8s}'
+  style.textContent = '.season-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;transition:opacity .8s;opacity:0}'
     + '.season-back{z-index:-1}.season-front{z-index:40}'
-    + 'html[data-season-quiet] .season-layer,html[data-assembly="pending"] .season-layer,'
-    + 'html[data-assembly="running"] .season-layer,html[data-chime="running"] .season-layer{opacity:0}';
+    + 'html[data-season-visible] .season-layer{opacity:1}';
   document.head.append(style);
 
-  const hidden = () => document.hidden || 'seasonQuiet' in root.dataset
-    || ['pending', 'running'].includes(root.dataset.assembly) || root.dataset.chime === 'running';
+  function updateVisible() {
+    const visible = !!wanted && !('seasonQuiet' in root.dataset)
+      && !['pending', 'running'].includes(root.dataset.assembly) && root.dataset.chime !== 'running';
+    if (visible) root.dataset.seasonVisible = ''; else delete root.dataset.seasonVisible;
+  }
+  new MutationObserver(updateVisible)
+    .observe(root, { attributes: true, attributeFilter: ['data-season-quiet', 'data-assembly', 'data-chime'] });
+
+  const hidden = () => document.hidden || !('seasonVisible' in root.dataset);
 
   function start() {
     const screen = document.getElementById('screen');
@@ -39,6 +47,7 @@
     if (link) link.remove();
     link = null;
     delete root.dataset.season;
+    delete root.dataset.seasonVisible;
   }
 
   function apply(id) {
@@ -48,6 +57,7 @@
     wanted = id;
     if (!id) return;
     root.dataset.season = id;
+    updateVisible();
     link = document.createElement('link');
     link.rel = 'stylesheet'; link.href = base + id + '/theme.css';
     document.head.append(link);

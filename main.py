@@ -18,7 +18,7 @@ import operation_info
 import bus_timetable
 import weather
 from demo import router as demo_router
-from seasons import router as seasons_router
+from seasons import catalog as seasons_catalog, router as seasons_router
 import dotenv
 dotenv.load_dotenv()
 from os import environ
@@ -821,6 +821,7 @@ async def get_status():
         "now": now.isoformat(),
         "started_at": _started_at.isoformat(),
         "code_hash": CODE_HASH,
+        "seasons": seasons_catalog(),
         "trains": {
             "enabled": features.get("trains", True),
             "last_success": iso(_last_pos_success),

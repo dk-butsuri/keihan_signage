@@ -69,17 +69,38 @@ def save_schedule(data: dict) -> None:
 # 季節の装飾（transit の templates/seasons/ のフォルダ名）。期間は月日で書き、毎年そのまま使う。
 # override は None なら期間どおり、"off" なら出さない、装飾の名前ならそれを出し続ける
 SEASON_FILE = DATA_DIR / "season.json"
-DEFAULT_SEASONS = {"override": None, "periods": [{"id": "christmas", "from": "12-01", "to": "12-25"},
-                                                 {"id": "shogatsu", "from": "01-01", "to": "01-03"}]}
 _SEASON_ID = re.compile(r"[a-z0-9-]{1,32}")
 _MONTH_DAY = re.compile(r"(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])")
+# 装飾の一覧（名前と既定の期間。transit の templates/seasons/*/meta.json）。_refresh_suspension が30秒ごとに取り直す。
+# 取れるまでは season.json に保存した期間だけで決める（装飾のファイルも transit が配るので、transit が無ければどのみち出ない）
+season_catalog: list[dict] = []
 
 
 def load_seasons() -> dict:
+    """装飾の一覧に、管理画面で変えた期間（season.json）を重ねたもの。一覧にあって保存していない装飾は meta.json の期間"""
     try:
-        return _valid_seasons(json.loads(SEASON_FILE.read_text(encoding="utf-8")))
+        saved = _valid_seasons(json.loads(SEASON_FILE.read_text(encoding="utf-8")))
     except (OSError, ValueError):
-        return DEFAULT_SEASONS
+        saved = {"override": None, "periods": []}
+    if not season_catalog:
+        return {"override": saved["override"], "periods": [{**p, "label": p["id"]} for p in saved["periods"]]}
+    chosen = {p["id"]: p for p in saved["periods"]}
+    periods = [{"id": item["id"], "label": item["label"], "from": chosen.get(item["id"], item)["from"],
+                "to": chosen.get(item["id"], item)["to"]} for item in season_catalog]
+    return {"override": saved["override"], "periods": periods}
+
+
+def _valid_catalog(items) -> list[dict]:
+    if not isinstance(items, list):
+        raise ValueError("seasons must be a list")
+    catalog = []
+    for item in items:
+        if not (isinstance(item, dict) and isinstance(item.get("id"), str) and _SEASON_ID.fullmatch(item["id"])
+                and isinstance(item.get("label"), str)
+                and all(isinstance(item.get(k), str) and _MONTH_DAY.fullmatch(item[k]) for k in ("from", "to"))):
+            raise ValueError("each season needs id, label, from and to")
+        catalog.append({key: item[key] for key in ("id", "label", "from", "to")})
+    return catalog
 
 
 def _valid_seasons(data) -> dict:
@@ -153,7 +174,14 @@ async def _refresh_suspension() -> bool:
         pass
     changed = suspended != keihan_suspended
     keihan_suspended = suspended
-    if versions.build != build:
+    catalog_changed = False
+    try:
+        catalog = _valid_catalog(status.get("seasons"))
+        catalog_changed = catalog != season_catalog
+        season_catalog[:] = catalog
+    except ValueError:
+        pass
+    if versions.build != build or catalog_changed:
         await broadcast_status()
     return changed
 
@@ -511,6 +539,7 @@ async def put_season(request: Request):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     SEASON_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     await broadcast_status()
+    data = load_seasons()
     return {**data, "active": active_season(data)}
 
 

@@ -410,11 +410,13 @@ display.html（クライアント）─── iframe の src を切替
 
 クリスマスなどの装飾は、交通情報の画面（`templates/minimal/index.html`）の上に重ねて出します。画面ごとに別の HTML は作りません。
 
-- どの装飾を出すかは controller が決めます。`controller_data/season.json` に期間を月日（`12-01`）で書き、毎年そのまま使います。`override` は `null` なら期間どおり、`"off"` なら出さない、装飾の名前ならそれを出し続けます。管理画面の「季節の装飾」から変えられます（`GET` / `PUT /api/season`）。
+- 装飾1つはフォルダ1つ（`templates/seasons/<名前>/`）で、`theme.js`・`theme.css`・`meta.json` を置きます。`meta.json` は管理画面での名前と、管理画面で変えていないときの期間です（`{"label": "バレンタイン", "from": "02-07", "to": "02-14"}`。期間は月日で書き、毎年そのまま使います）。
+- どの装飾を出すかは controller が決めます。transit は `/api/status` の `seasons` に `meta.json` の一覧を載せ、controller は30秒ごとの見合わせの確認のついでにそれを読みます。管理画面の「季節の装飾」で期間を変えると `controller_data/season.json` に残り、そちらが `meta.json` より優先します。一覧に無い装飾（フォルダを消したもの）は、保存してあっても出しません。`override` は `null` なら期間どおり、`"off"` なら出さない、装飾の名前ならそれを出し続けます（`GET` / `PUT /api/season`）。
 - 結果は `/api/mode` とその配信の `season` に入ります。端末（`display.html`）は中の画面に `postMessage` で知らせるので、読み込み直さずに切り替わります。端末の外で開いた画面（管理画面の縮小表示など）は、自分で `/api/mode` を聞きに行きます。
-- 画面の側は `templates/minimal/seasonal.js` が受け取り、`templates/seasons/<名前>/` の `theme.css` と `theme.js` を読み込みます（transit の `seasons.py` が `/assets/seasons/...` で配ります）。
-- 装飾は `#screen` の中の2枚の層（文字の後ろ・文字の前）にだけ描きます。見合わせ時の画面、警報（レベル3以上）、起動の組み上げ、時報のあいだは、`seasonal.js` が層ごと隠します。
+- 画面の側は `templates/minimal/seasonal.js` が受け取り、そのフォルダの `theme.css` と `theme.js` を読み込みます（transit の `seasons.py` が `/assets/seasons/...` で配ります。配るのは `.js .css .svg .png .webp` だけで、`meta.json` は配りません）。
+- 装飾は `#screen` の中の2枚の層（文字の後ろ・文字の前）に描きます。`seasonal.js` は、装飾を見せてよいときだけ `html` に `data-season-visible` を付けます。見合わせ時の画面、警報（レベル3以上）、起動の組み上げ、時報のあいだは外れ、層は消えます。
+- カードの見た目は、交通情報の画面が CSS 変数で受け取ります（列車・バスのカードと運行情報の枠。`--card-bg` が地の色、`--card-edge` が `box-shadow`）。装飾の `theme.css` では `html[data-season="<名前>"][data-season-visible] { --card-bg: ...; }` のように変数だけを差し替えます。こうすると見合わせ時などに自動で元に戻ります。隠す条件を装飾の CSS に書き写したり、`!important` でカードの指定を上書きしたりしないでください。幅・行数・文字の大きさは変数にしていないので、装飾からは変えません。
 
-装飾を足すときは、`templates/seasons/<名前>/theme.js` で `window.signageSeason.define('<名前>', ({screen, back, front, motion, hidden}) => { ...; return 後片付けの関数; })` を呼び、`season.json` の `periods` に期間を足します（管理画面の表示名は `admin.html` の `SEASON_LABEL`）。`motion` が偽のときは動かさず、`hidden()` が真のあいだは描かないようにします。
+装飾を足すときは、そのフォルダに `meta.json` を置き、`theme.js` で `window.signageSeason.define('<名前>', ({screen, back, front, motion, hidden}) => { ...; return 後片付けの関数; })` を呼びます。`motion` が偽のときは動かさず、`hidden()` が真のあいだは描かないようにします（`hidden()` は `data-season-visible` が無いときと、ページが裏に回っているときに真）。transit を作り直せば、controller と管理画面には次の確認（30秒以内）で載ります。
 
-期間の外で見るには、画面の URL に `?season=christmas` を付けます（`/transit/?season=christmas`、`/demo/normal?season=christmas`）。デモのページはこの指定だけを見ます。確認は `tests/test_season.py`。
+期間の外で見るには、画面の URL に `?season=christmas` を付けます（`/transit/?season=christmas`、`/demo/normal?season=christmas`）。デモのページはこの指定だけを見ます。確認は `tests/test_season.py`（期間の決め方・一覧・`meta.json`）と `node tests/test_season_display.cjs`（フォルダにある装飾をすべて読み込み、エラーが出ないこと、層に何か描くこと、時報・組み上げ・見合わせ時の画面で印が外れて層とカードの色が元に戻ること、外したときに層・CSS・印が残らないことを確かめます。装飾を足してもこのテストは書き足さなくて構いません）。

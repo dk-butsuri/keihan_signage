@@ -30,8 +30,11 @@ def test_season_api_saves_and_reports_to_displays(tmp_path, monkeypatch):
     monkeypatch.setattr(controller, "DATA_DIR", tmp_path)
     monkeypatch.setattr(controller, "SEASON_FILE", tmp_path / "season.json")
     monkeypatch.setattr(controller, "ADMIN_TOKEN", "secret")
+    monkeypatch.setattr(controller, "season_catalog", seasons.catalog())
     client = TestClient(controller.app)
-    assert client.get("/api/season").json()["periods"] == controller.DEFAULT_SEASONS["periods"]
+    listed = client.get("/api/season").json()["periods"]
+    assert [p["id"] for p in listed] == [item["id"] for item in seasons.catalog()]
+    assert {p["id"]: p["label"] for p in listed}["valentine"] == "バレンタイン"
     body = {"override": "christmas", "periods": PERIODS}
     assert client.put("/api/season", json=body).status_code == 401
     saved = client.put("/api/season", json=body, headers={"Authorization": "Bearer secret"})
@@ -56,3 +59,36 @@ def test_season_files_are_served_only_from_existing_folders():
         assert client.get(f"{prefix}/seasons/christmas/seasonal.js").status_code == 404
         assert client.get(f"{prefix}/seasons/nope/theme.js").status_code == 404
     client.close()
+
+
+def test_every_season_folder_has_a_valid_meta():
+    # meta.json が無い・壊れている装飾は一覧に載らず、期間どおりに出なくなる
+    assert [item["id"] for item in seasons.catalog()] != []
+    assert sorted(item["id"] for item in seasons.catalog()) == seasons.season_ids()
+    assert controller._valid_catalog(seasons.catalog()) == seasons.catalog()
+
+
+def test_saved_periods_override_the_catalog(tmp_path, monkeypatch):
+    monkeypatch.setattr(controller, "SEASON_FILE", tmp_path / "season.json")
+    monkeypatch.setattr(controller, "season_catalog", [
+        {"id": "christmas", "label": "クリスマス", "from": "12-01", "to": "12-25"},
+        {"id": "valentine", "label": "バレンタイン", "from": "02-07", "to": "02-14"}])
+    # 保存が無ければ meta.json の期間
+    assert controller.active_season(controller.load_seasons(), datetime.fromisoformat("2027-02-10")) == "valentine"
+    # 管理画面で変えた期間が勝ち、一覧に無い装飾（フォルダを消したもの）は出さない
+    (tmp_path / "season.json").write_text('{"override": null, "periods": [{"id": "valentine", "from": "02-13", "to": "02-14"},'
+                                          ' {"id": "gone", "from": "01-01", "to": "12-31"}]}', encoding="utf-8")
+    data = controller.load_seasons()
+    assert [p["id"] for p in data["periods"]] == ["christmas", "valentine"]
+    assert controller.active_season(data, datetime.fromisoformat("2027-02-10")) is None
+    assert controller.active_season(data, datetime.fromisoformat("2027-02-13")) == "valentine"
+    # transit から一覧が取れないあいだは、保存した期間だけで決める
+    monkeypatch.setattr(controller, "season_catalog", [])
+    assert controller.active_season(controller.load_seasons(), datetime.fromisoformat("2027-06-01")) == "gone"
+
+
+def test_catalog_from_transit_is_validated():
+    for bad in (None, "x", [{"id": "../x", "label": "a", "from": "01-01", "to": "01-02"}],
+                [{"id": "a", "label": "a", "from": "1-1", "to": "01-02"}], [{"id": "a", "from": "01-01", "to": "01-02"}]):
+        with pytest.raises(ValueError):
+            controller._valid_catalog(bad)

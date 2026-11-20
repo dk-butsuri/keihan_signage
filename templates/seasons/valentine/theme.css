@@ -16,9 +16,8 @@
 .vl-label { display:flex; flex-direction:column; gap:6px; color:#D9B878; line-height:1; white-space:nowrap; }
 .vl-label b { font:italic 500 34px 'Cormorant Garamond', Georgia, 'Times New Roman', serif; letter-spacing:.01em; }
 .vl-label span { font:400 12px 'Zen Kaku Gothic New', sans-serif; letter-spacing:.34em; color:rgba(217, 184, 120, .62); padding-left:2px; }
-/* カード: 地をココア色にわずかに寄せ、金の細線で縁取る。見合わせ・警報・組み上げ・時報のあいだは元に戻す */
-html[data-season="valentine"]:not([data-season-quiet]):not([data-assembly="pending"]):not([data-assembly="running"]):not([data-chime="running"]) :is(#normal-down-list, #normal-up-list, #normal-bus-list) > div:not(.empty),
-html[data-season="valentine"]:not([data-season-quiet]):not([data-assembly="pending"]):not([data-assembly="running"]):not([data-chime="running"]) #normal-delay-list > div {
-  background: #1B1613 !important;
-  box-shadow: inset 0 0 0 1px rgba(201, 162, 94, .22);
+/* カード: 地をココア色にわずかに寄せ、金の細線で縁取る（見せてよいときだけ。見合わせ・警報・組み上げ・時報のあいだは元に戻る） */
+html[data-season="valentine"][data-season-visible] {
+  --card-bg: #1B1613;
+  --card-edge: inset 0 0 0 1px rgba(201, 162, 94, .22);
 }
