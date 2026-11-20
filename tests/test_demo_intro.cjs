@@ -40,13 +40,13 @@ const fs=require('fs'),os=require('os'),path=require('path');
     await seek(400);
     const name=Number(await board.locator('#station-name').evaluate(node=>getComputedStyle(node).opacity));
     assert.ok(name>.9);
-    assert.equal(await board.locator('#normal-up-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
+    assert.equal(await board.locator('#normal-down-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
     await seek(450);
-    const head=await board.locator('#normal-up > :first-child').evaluate(node=>getComputedStyle(node).clipPath);
+    const head=await board.locator('#normal-down > :first-child').evaluate(node=>getComputedStyle(node).clipPath);
     assert.notEqual(head,'none');
     assert.equal(await board.locator('#normal-delay-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
     await seek(448);
-    const phase=await board.locator('#normal-up-list > div').first().evaluate(node=>({
+    const phase=await board.locator('#normal-down-list > div').first().evaluate(node=>({
         row:Number(getComputedStyle(node).opacity),
         edge:Number(getComputedStyle(node.querySelector('.demo-intro-edge')).opacity),
         kind:getComputedStyle(node.querySelector('.train-kind')).filter

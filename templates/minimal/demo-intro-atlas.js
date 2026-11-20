@@ -556,7 +556,7 @@
     ctx.textAlign = 'left';
     ctx.fillText('NEYAGAWA, OSAKA   ×' + SPEC.exaggerate.toFixed(1) + ' VERTICAL', 64, SPEC.H - 64);
     ctx.font = `300 11px ${H.font}`; ctx.fillStyle = rgb(hex(H.color), a * .7);
-    ctx.fillText('© OpenStreetMap contributors · 国土地理院', 64, SPEC.H - 40);
+    ctx.fillText('© OpenStreetMap contributors · 国土地理院 · 線路を走る光はイメージで、実際の列車の位置ではありません', 64, SPEC.H - 40);
   }
   /* 照準: 画面の端から2本の細線が滑ってきて学校の上で交わり、枠が締まってから波が出る。 */
   function drawLock(t) {
@@ -742,7 +742,7 @@
     doc.querySelectorAll('#clock-time > span,#clock-seconds > span')
       .forEach((digit, index) => lift(digit, SPEC.clock.start + index * SPEC.clock.digitStagger));
     motion(doc.getElementById('clock-date'), [{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }], SPEC.clock.start + .2, .3);
-    ['normal-up', 'normal-down', 'normal-buses', 'normal-delays'].map(id => doc.getElementById(id)).forEach((column, index) => {
+    ['normal-down', 'normal-up', 'normal-buses', 'normal-delays'].map(id => doc.getElementById(id)).forEach((column, index) => {
       const begin = A.start + index * A.columnGap, heading = column.firstElementChild;
       motion(heading, [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], begin, .5, 'cubic-bezier(.65,0,.25,1)');
       [...heading.children].forEach(child => sweep(child, begin, .38));
@@ -906,7 +906,7 @@
     Promise.all([
       document.fonts.load('300 66px "Zen Kaku Gothic New"', SPEC.title.lines[1]),
       document.fonts.load('400 36px "Zen Kaku Gothic New"', SPEC.title.lines[0] + '同志社香里園'),
-      document.fonts.load('500 20px "Zen Kaku Gothic New"', '探究1A-2班'),
+      document.fonts.load('500 20px "Zen Kaku Gothic New"', '探究1A-1班'),
       document.fonts.load('300 14px "IBM Plex Mono"', 'NE0123456789.°′″ ALTPITCHDGkm')
     ]),
     new Promise(resolve => setTimeout(resolve, 4000))

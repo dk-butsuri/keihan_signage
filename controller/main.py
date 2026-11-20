@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -44,7 +45,9 @@ app.add_middleware(
 current_mode: str = "transit"
 manual_override_until: Optional[datetime] = None
 subscribers: list[asyncio.Queue] = []
-display_clients: dict[int, datetime] = {}
+display_clients: dict[int, dict] = {}
+# 端末が自分で送ってくる画面・OSの情報。端末のタブごとの id で引く
+display_info: dict[str, dict] = {}
 
 
 def _require_admin(request: Request) -> None:
@@ -63,13 +66,64 @@ def save_schedule(data: dict) -> None:
     SCHEDULE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _transit_features() -> tuple[bool, bool]:
-    """列車とバスがそれぞれオンか。管理画面と同じく、書かれていない項目はオンとみなす"""
+# 季節の装飾（transit の templates/seasons/ のフォルダ名）。期間は月日で書き、毎年そのまま使う。
+# override は None なら期間どおり、"off" なら出さない、装飾の名前ならそれを出し続ける
+SEASON_FILE = DATA_DIR / "season.json"
+DEFAULT_SEASONS = {"override": None, "periods": [{"id": "christmas", "from": "12-01", "to": "12-25"},
+                                                 {"id": "shogatsu", "from": "01-01", "to": "01-03"}]}
+_SEASON_ID = re.compile(r"[a-z0-9-]{1,32}")
+_MONTH_DAY = re.compile(r"(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])")
+
+
+def load_seasons() -> dict:
+    try:
+        return _valid_seasons(json.loads(SEASON_FILE.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return DEFAULT_SEASONS
+
+
+def _valid_seasons(data) -> dict:
+    if not isinstance(data, dict) or not isinstance(data.get("periods"), list):
+        raise ValueError("periods must be a list")
+    override = data.get("override")
+    if override is not None and not (isinstance(override, str) and _SEASON_ID.fullmatch(override)):
+        raise ValueError("override must be null, \"off\" or a season id")
+    periods = []
+    for period in data["periods"]:
+        values = [period.get(key) for key in ("id", "from", "to")] if isinstance(period, dict) else [None]
+        if not all(isinstance(value, str) for value in values):
+            raise ValueError("each period needs id, from and to")
+        if not (_SEASON_ID.fullmatch(values[0]) and _MONTH_DAY.fullmatch(values[1]) and _MONTH_DAY.fullmatch(values[2])):
+            raise ValueError("id must be a season id, from and to must be MM-DD")
+        periods.append(dict(zip(("id", "from", "to"), values)))
+    return {"override": override, "periods": periods}
+
+
+def active_season(data: dict, today: Optional[datetime] = None) -> Optional[str]:
+    if data["override"]:
+        return None if data["override"] == "off" else data["override"]
+    day = (today or datetime.now()).strftime("%m-%d")
+    for period in data["periods"]:
+        start, end = period["from"], period["to"]
+        # 年をまたぐ期間（12-28〜01-03 など）は、始まり以降か終わり以前
+        if (start <= day <= end) if start <= end else (day >= start or day <= end):
+            return period["id"]
+    return None
+
+
+def _features() -> dict:
+    """表示する情報のオン・オフ。管理画面と同じく、書かれていない項目はオンとみなす"""
     try:
         features = (yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8")) or {}).get("features") or {}
     except Exception:
-        return True, True
-    return features.get("trains", True) is not False, features.get("buses", True) is not False
+        features = {}
+    return {key: features.get(key, True) is not False for key in ("trains", "buses", "delays", "weather")}
+
+
+def _transit_features() -> tuple[bool, bool]:
+    """列車とバスがそれぞれオンか"""
+    features = _features()
+    return features["trains"], features["buses"]
 
 
 def _transit_disabled() -> bool:
@@ -132,9 +186,11 @@ def _mode_status() -> dict:
     status["scheduled_mode"] = current_mode
     status["transit_disabled"] = _transit_disabled()
     status["transit_view"] = _transit_view()
+    status["features"] = _features()
     # 端末は build が変わったら画面を読み直す（version は人が読む番号）
     status["version"] = versions.version
     status["build"] = versions.build
+    status["season"] = active_season(load_seasons())
     if status["transit_disabled"]:
         status["mode"] = "clock"
     return status
@@ -250,7 +306,7 @@ async def mode_stream(request: Request):
     # 管理画面以外の接続はすべて表示端末として数える（更新前に開いた端末は client を付けずに接続してくる）
     is_display = request.query_params.get("client") != "admin"
     if is_display:
-        display_clients[id(queue)] = datetime.now()
+        display_clients[id(queue)] = {"since": datetime.now(), "id": request.query_params.get("id", "")[:64]}
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
@@ -281,10 +337,72 @@ async def check_auth(request: Request):
     return Response(status_code=204)
 
 
+def _display_groups() -> list[dict]:
+    """つながっている端末を、タブごとの id でまとめる。
+    Cloudflare 越しだと切れた接続がしばらく残るので、同じタブの接続は1台に数える（id を送らない古い端末は1本ずつ）"""
+    groups: dict[str, dict] = {}
+    for key, client in display_clients.items():
+        group_key = client["id"] or f"conn-{key}"
+        group = groups.setdefault(group_key, {"id": client["id"], "since": client["since"], "connections": 0})
+        group["since"] = max(group["since"], client["since"])
+        group["connections"] += 1
+    return sorted(groups.values(), key=lambda g: g["since"])
+
+
+def _is_admin(request: Request) -> bool:
+    return bool(ADMIN_TOKEN) and request.headers.get("Authorization", "") == f"Bearer {ADMIN_TOKEN}"
+
+
 @app.get("/api/displays")
-async def get_displays():
-    return {"count": len(display_clients),
-            "connected_since": sorted(t.isoformat() for t in display_clients.values())}
+async def get_displays(request: Request):
+    groups = _display_groups()
+    result = {"count": len(groups), "connected_since": [g["since"].isoformat() for g in groups]}
+    # 画面やOSの情報は端末を特定する手がかりになるので、ログインした管理画面にだけ返す
+    if _is_admin(request):
+        result["clients"] = [{"since": g["since"].isoformat(), "connections": g["connections"],
+                              **display_info.get(g["id"], {})} for g in groups]
+    return result
+
+
+def _numbers(value, count: int) -> Optional[list]:
+    if not isinstance(value, list) or len(value) != count or not all(isinstance(v, (int, float)) and 0 <= v < 100000 for v in value):
+        return None
+    return value
+
+
+def _ago(milliseconds) -> Optional[datetime]:
+    if not isinstance(milliseconds, (int, float)) or not 0 <= milliseconds < 400 * 86400000:
+        return None
+    return datetime.now() - timedelta(milliseconds=milliseconds)
+
+
+@app.post("/api/displays/info", status_code=204)
+async def post_display_info(request: Request):
+    body = await request.body()
+    if len(body) > 4096:
+        raise HTTPException(status_code=413, detail="too large")
+    try:
+        data = json.loads(body)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid json")
+    if not isinstance(data, dict) or not isinstance(data.get("id"), str) or not data["id"]:
+        raise HTTPException(status_code=400, detail="id is required")
+    connected = {c["id"] for c in display_clients.values()}
+    for key in [k for k, v in display_info.items() if k not in connected and datetime.now() - v["updated"] > timedelta(hours=1)]:
+        display_info.pop(key, None)
+    if data["id"][:64] not in display_info and len(display_info) >= 50:
+        raise HTTPException(status_code=429, detail="too many displays")
+    display_info[data["id"][:64]] = {
+        "user_agent": request.headers.get("user-agent", "")[:300],
+        "screen": _numbers(data.get("screen"), 2), "viewport": _numbers(data.get("viewport"), 2),
+        "dpr": data.get("dpr") if isinstance(data.get("dpr"), (int, float)) and 0 < data["dpr"] < 20 else None,
+        "platform": _text(data.get("platform"), 40), "platform_version": _text(data.get("platform_version"), 40),
+        "model": _text(data.get("model"), 80), "browser": _text(data.get("browser"), 80),
+        "language": _text(data.get("language"), 20), "updated": datetime.now(),
+        "tab_started": _ago(data.get("tab_age_ms")), "page_loaded": _ago(data.get("page_age_ms")),
+        "page": _text(data.get("page"), 100), "build": _text(data.get("build"), 40), "version": _text(data.get("version"), 40),
+    }
+    return Response(status_code=204)
 
 
 # ホストが NTP で同期しているので、自前で NTP に問い合わせない（待つ間の分だけ表示が進んでいた）
@@ -292,6 +410,76 @@ async def get_displays():
 async def get_time():
     return JSONResponse(content={"ts": time.time()}, headers={"Cache-Control": "no-store"})
 
+
+
+ERRORS_FILE = DATA_DIR / "errors.json"
+ERRORS_KEEP = 100
+ERROR_KINDS = {"error", "rejection", "resource", "offline"}
+# 端末は認証なしで送ってくるので、外から大量に送られてもファイルが膨らまないよう、受け付ける量に上限を置く
+ERROR_RATE_PER_MINUTE = 60
+_error_times: list[float] = []
+
+
+def load_errors() -> list[dict]:
+    try:
+        return json.loads(ERRORS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def _text(value, limit: int) -> str:
+    return str(value or "")[:limit]
+
+
+@app.post("/api/errors", status_code=204)
+async def report_errors(request: Request):
+    body = await request.body()
+    if len(body) > 32768:
+        raise HTTPException(status_code=413, detail="too large")
+    try:
+        reports = json.loads(body)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid json")
+    if not isinstance(reports, list):
+        raise HTTPException(status_code=400, detail="must be a list")
+    now = time.time()
+    _error_times[:] = [t for t in _error_times if now - t < 60]
+    room = ERROR_RATE_PER_MINUTE - len(_error_times)
+    if room <= 0:
+        raise HTTPException(status_code=429, detail="too many reports")
+    items = load_errors()
+    by_key = {(i["kind"], i["message"], i["source"], i["page"]): i for i in items}
+    stamp = datetime.now().isoformat(timespec="seconds")
+    for report in reports[:min(20, room)]:
+        if not isinstance(report, dict) or report.get("kind") not in ERROR_KINDS:
+            continue
+        _error_times.append(now)
+        key = (report["kind"], _text(report.get("message"), 300), _text(report.get("source"), 200), _text(report.get("page"), 100))
+        count = report.get("count")
+        count = count if isinstance(count, int) and 0 < count < 10000 else 1
+        item = by_key.get(key)
+        if item is None:
+            item = by_key[key] = {"kind": key[0], "message": key[1], "source": key[2], "page": key[3], "count": 0, "first": stamp}
+        item["count"] += count
+        item["last"] = stamp
+        item["build"] = _text(report.get("build"), 20)
+        item["detail"] = _text(report.get("detail"), 500)
+    kept = sorted(by_key.values(), key=lambda i: i["last"], reverse=True)[:ERRORS_KEEP]
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    ERRORS_FILE.write_text(json.dumps(kept, ensure_ascii=False, indent=1), encoding="utf-8")
+    return Response(status_code=204)
+
+
+@app.get("/api/errors")
+async def get_errors():
+    return {"items": load_errors()}
+
+
+@app.delete("/api/errors", status_code=204)
+async def clear_errors(request: Request):
+    _require_admin(request)
+    ERRORS_FILE.unlink(missing_ok=True)
+    return Response(status_code=204)
 
 
 @app.get("/api/schedule")
@@ -305,6 +493,25 @@ async def put_schedule(request: Request):
     data = await request.json()
     save_schedule(data)
     return data
+
+
+@app.get("/api/season")
+async def get_season():
+    data = load_seasons()
+    return {**data, "active": active_season(data)}
+
+
+@app.put("/api/season")
+async def put_season(request: Request):
+    _require_admin(request)
+    try:
+        data = _valid_seasons(await request.json())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    SEASON_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    await broadcast_status()
+    return {**data, "active": active_season(data)}
 
 
 @app.get("/api/config")

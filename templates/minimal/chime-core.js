@@ -241,7 +241,7 @@ export function createChime({ boardDoc: doc, canvas, titleLayer, slots, variant 
       .forEach((digit, index) => lift(digit, clockStart + index * .027));
     motion(doc.getElementById('clock-date'), [{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }], clockStart + .2, .3);
     for (const id of ['weather', 'reconnect-badge']) motion(doc.getElementById(id), [{ opacity: 0 }, { opacity: 1 }], clockStart + .35, .4);
-    ['normal-up', 'normal-down', 'normal-buses', 'normal-delays'].map(id => doc.getElementById(id)).forEach((column, index) => {
+    ['normal-down', 'normal-up', 'normal-buses', 'normal-delays'].map(id => doc.getElementById(id)).forEach((column, index) => {
       const begin = A.start + index * A.columnGap, heading = column.firstElementChild;
       motion(heading, [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], begin, .5, 'cubic-bezier(.65,0,.25,1)');
       [...heading.children].forEach(child => sweep(child, begin, .38));

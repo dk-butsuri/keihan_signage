@@ -18,6 +18,7 @@ import operation_info
 import bus_timetable
 import weather
 from demo import router as demo_router
+from seasons import router as seasons_router
 import dotenv
 dotenv.load_dotenv()
 from os import environ
@@ -382,6 +383,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+# /demo/assets/... が demo の /demo/{id}/... より先に当たるよう、先に登録する
+app.include_router(seasons_router)
 app.include_router(demo_router)
 app.add_middleware(
     CORSMiddleware,
@@ -494,6 +497,7 @@ class DelayGroup(BaseModel):
 
 class DelayResponse(BaseModel):
     delays: List[DelayInfo]
+    enabled: bool = True
     groups: List[DelayGroup] = Field(default_factory=list)
     error: Optional[str] = None
 
@@ -784,6 +788,9 @@ async def get_buses():
 
 @app.get("/api/delays", response_model=DelayResponse)
 async def get_delays():
+    # オフにしても取得済みの内容は残るので、ここで止めないと時計やボードに出続ける
+    if not _cfg.get("features", {}).get("delays", True):
+        return DelayResponse(delays=[], groups=[], enabled=False)
     groups = latest_delay_groups or [DelayGroup(**g) for g in operation_info.groups(None, _cfg.get("delays") or {})]
     return DelayResponse(delays=latest_delay_data, groups=groups, error=latest_delay_error)
 

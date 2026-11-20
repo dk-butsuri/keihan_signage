@@ -38,16 +38,16 @@ const groups=['京阪','大阪メトロ','JR','大阪モノレール','近鉄','
     async function geometry(page){return page.locator('#station-name,#clock-time,#normal-up-list > div,#normal-down-list > div,#normal-bus-list > div,#normal-delay-list > div,#operation-slides').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,opacity:getComputedStyle(node).opacity,transform:getComputedStyle(node).transform,text:node.id==='clock-time'?'':node.textContent};}));}
     for(const [width,height] of [[1920,1080],[960,540],[1919,990],[1920,1200]]) {
         const {page}=await view({width,height});await waitState(page,'running');await seek(page,1666);
-        const phase=await page.evaluate(()=>{const row=document.querySelector('#normal-up-list > div');return ['time','destination','remaining'].map(name=>Number(getComputedStyle(row.querySelector(`[data-field="${name}"]`)).opacity));});
+        const phase=await page.evaluate(()=>{const row=document.querySelector('#normal-down-list > div');return ['time','destination','remaining'].map(name=>Number(getComputedStyle(row.querySelector(`[data-field="${name}"]`)).opacity));});
         assert.ok(phase[0]>phase[1]&&phase[1]>phase[2],JSON.stringify(phase));
         assert.equal(await page.locator('#normal-delay-list > div').first().evaluate(node=>getComputedStyle(node).opacity),'0');
-        const guides=await page.evaluate(()=>{const root=document.getElementById('screen'),scale=root.getBoundingClientRect().width/root.offsetWidth;return [...document.querySelectorAll('.demo-assembly-guide')].map((guide,index)=>guide.getBoundingClientRect().left-document.getElementById(['normal-up','normal-down','normal-buses','normal-delays'][index]).getBoundingClientRect().left+(index?7*scale:0));});
+        const guides=await page.evaluate(()=>{const root=document.getElementById('screen'),scale=root.getBoundingClientRect().width/root.offsetWidth;return [...document.querySelectorAll('.demo-assembly-guide')].map((guide,index)=>guide.getBoundingClientRect().left-document.getElementById(['normal-down','normal-up','normal-buses','normal-delays'][index]).getBoundingClientRect().left+(index?7*scale:0));});
         assert.ok(guides.every(offset=>Math.abs(offset)<.1),JSON.stringify({width,guides}));
         await page.screenshot({path:out+`/opening-${width}-${height}.png`});
         await finish(page);await cleaned(page);
         const baseline=await view({width,height,off:true});await baseline.page.waitForFunction(()=>trainData&&busData&&delayData);await baseline.page.evaluate(()=>document.fonts.ready);
         assert.deepEqual(await geometry(page),await geometry(baseline.page),`${width}x${height} changed layout`);
-        assert.equal(baseline.requests.filter(name=>name.includes('/assets/')&&!name.endsWith('/weather.js')).length,0);
+        assert.equal(baseline.requests.filter(name=>name.includes('/assets/')&&!name.endsWith('/weather.js')&&!name.endsWith('/seasonal.js')).length,0);
         await page.evaluate(()=>{trainData.up_trains[0].destination='樟葉';render();});assert.equal(await state(page),'completed');await cleaned(page);
         await baseline.page.close();await page.close();
     }

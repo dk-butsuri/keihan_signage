@@ -1,0 +1,8 @@
+.xmas-snow { position:absolute; inset:0; width:100%; height:100%; }
+.xmas-lights { position:absolute; left:0; top:0; }
+.xmas-lights svg { position:absolute; left:0; top:0; overflow:visible; }
+.xmas-bulb { position:absolute; width:9px; height:13px; margin:0 0 0 -4.5px; border-radius:50% 50% 50% 50% / 40% 40% 60% 60%; background:currentColor; box-shadow:0 0 12px 2px currentColor; opacity:.9; }
+.xmas-bulb::before { content:''; position:absolute; left:3px; top:-3px; width:3px; height:4px; background:#C9A227; }
+.xmas-lights.is-moving .xmas-bulb { animation:xmas-twinkle 3.6s ease-in-out infinite; }
+@keyframes xmas-twinkle { 0%,100% { opacity:.45; } 50% { opacity:1; } }
+.xmas-santa { position:absolute; left:0; top:0; visibility:hidden; transform-origin:150px 60px; will-change:transform; }

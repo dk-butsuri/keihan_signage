@@ -1,0 +1,8 @@
+.ny-flakes { position:absolute; inset:0; width:100%; height:100%; }
+.ny-rope { position:absolute; left:0; top:0; }
+.ny-rope svg { position:absolute; left:0; top:0; overflow:visible; }
+.ny-shide { position:absolute; width:18px; height:28px; margin-left:-9px; transform-origin:50% 0; }
+.ny-tassel { position:absolute; width:14px; height:22px; margin-left:-7px; transform-origin:50% 0; }
+.ny-rope.is-moving .ny-shide, .ny-rope.is-moving .ny-tassel { animation:ny-sway 5s ease-in-out infinite; }
+@keyframes ny-sway { 0%,100% { transform:rotate(-4deg); } 50% { transform:rotate(4deg); } }
+.ny-crane { position:absolute; left:0; top:0; visibility:hidden; will-change:transform; }

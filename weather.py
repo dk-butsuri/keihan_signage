@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Sequence
 
 from pyjmaxml.normalize.possibility import Possibility, PossibilityCell
 from pyjmaxml.normalize.warning import Element, Stage, WarningKind, rank
+
+# 起動直後の長期フィードは1000件を超えるので、あふれた分を捨てるたびに警告が出て、1回の起動でログが数千行埋まる。
+# 捨てられるのは古い電文で、いまの状態には影響しない
+logging.getLogger("pyjmaxml.feed").setLevel(logging.ERROR)
 
 JST = datetime.timezone(datetime.timedelta(hours=9), "JST")
 

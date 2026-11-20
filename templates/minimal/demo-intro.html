@@ -26,7 +26,7 @@
 <header><nav aria-label="デモの選択"><a id="intro-back" href="/demo">← デモ一覧</a><label class="choice">デモ<select id="intro-demo" aria-label="デモ選択">{% for item in demos %}<option value="{{ item.id }}" {% if item.id == demo.id %}selected{% endif %} {% if not item.available %}disabled{% endif %}>{{ item.title }}</option>{% endfor %}</select></label></nav><h1>{{ demo.title }}</h1></header>
 
 <div id="tankyu-intro">
-  <div class="intro-stage" role="img" aria-label="起動イントロ。黒い画面に京阪本線が引かれ、種別の色の光が行き交う。準急が香里園に止まると画面が駅に寄り、路線の線が見出しの下線になって、発車案内が左から組み上がります。"><canvas class="intro-rail" width="1920" height="1080" aria-hidden="true"></canvas><div class="intro-title" aria-hidden="true"><div class="intro-group">探究1A-2班</div><div class="intro-line1"></div><div class="intro-line2"></div></div></div>
+  <div class="intro-stage" role="img" aria-label="起動イントロ。黒い画面に京阪本線が引かれ、種別の色の光が行き交う。準急が香里園に止まると画面が駅に寄り、路線の線が見出しの下線になって、発車案内が左から組み上がります。"><canvas class="intro-rail" width="1920" height="1080" aria-hidden="true"></canvas><div class="intro-title" aria-hidden="true"><div class="intro-group">探究1A-1班</div><div class="intro-line1"></div><div class="intro-line2"></div></div></div>
   <div class="intro-controls">
     <button type="button" data-action="play" disabled>最初から再生</button>
     <button type="button" data-action="restart" disabled>やり直す</button>

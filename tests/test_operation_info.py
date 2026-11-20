@@ -188,4 +188,8 @@ def test_delay_api_keeps_legacy_rows_and_exposes_groups(monkeypatch):
     monkeypatch.setattr(main, "latest_delay_groups", [])
     monkeypatch.setattr(main, "_cfg", {})
     assert all(group["status"] == "情報なし" for group in client.get('/api/delays').json()["groups"])
+    monkeypatch.setattr(main, "latest_delay_groups", [main.DelayGroup(**group) for group in operation_info.groups(tracker, {})])
+    monkeypatch.setattr(main, "_cfg", {"features": {"delays": False}})
+    off = client.get('/api/delays').json()
+    assert off["enabled"] is False and off["groups"] == [] and off["delays"] == []
     client.close()

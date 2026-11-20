@@ -73,7 +73,8 @@ td:last-child{text-align:right}
 .switch input:disabled+span{opacity:.45;cursor:not-allowed}
 .switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 .savebar{display:flex;gap:12px;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
-.msg{font-size:14px}.msg.ok{color:var(--ok)}.msg.err{color:var(--bad)}
+.msg{font-size:14px}
+#errors-list .detail,#status-list .detail{white-space:pre-line}.msg.ok{color:var(--ok)}.msg.err{color:var(--bad)}
 details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
 summary{cursor:pointer;color:var(--sub);font-size:14px}
 textarea{width:100%;min-height:340px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.5}
@@ -81,7 +82,7 @@ textarea{width:100%;min-height:340px;margin-top:10px;font-family:ui-monospace,Me
 .login input{flex:1;min-width:180px}
 .note{font-size:13.5px;color:var(--dim);margin:8px 0 0}
 .locked .needs-auth{opacity:.5}
-@media(max-width:960px){main{grid-template-columns:1fr;padding:16px}.col{display:contents}#login-card{order:0}#status-card{order:1}#display-card{order:2}#schedule-card{order:3}#settings-card{order:4}.bar{padding:12px 16px}.links{margin-left:0;width:100%}}
+@media(max-width:960px){main{grid-template-columns:1fr;padding:16px}.col{display:contents}#login-card{order:0}#status-card{order:1}#errors-card{order:1}#display-card{order:2}#schedule-card{order:3}#settings-card{order:4}.bar{padding:12px 16px}.links{margin-left:0;width:100%}}
 @media(max-width:480px){.status-row{grid-template-columns:14px 80px minmax(0,1fr)}.field input[type=text]{width:160px}}
 </style>
 </head>
@@ -127,12 +128,27 @@ textarea{width:100%;min-height:340px;margin-top:10px;font-family:ui-monospace,Me
     </div>
     <p class="note">0時から最初の予定までは「<select id="default-mode" class="needs-auth" aria-label="最初の予定までの表示"><option value="transit">交通情報</option><option value="clock">時計</option></select>」を表示します。予定は30秒ごとに確かめます。</p>
   </section>
+
+  <section class="card" id="season-card">
+    <h2>季節の装飾<span class="aside" id="season-active"></span></h2>
+    <div class="actions needs-auth">
+      <select id="season-override" aria-label="季節の装飾"></select>
+      <span class="msg" id="season-msg" role="status"></span>
+    </div>
+    <table><thead><tr><th>装飾</th><th>出す期間（毎年）</th></tr></thead><tbody id="season-periods" class="needs-auth"></tbody></table>
+    <p class="note">交通情報の画面にだけ出ます。京阪が見合わせ時の画面のときと、警報（レベル3以上）が出ているあいだは自動で消えます。</p>
+  </section>
 </div>
 
 <div class="col">
   <section class="card" id="status-card">
     <h2>動作状況<span class="aside" id="status-checked"></span></h2>
     <div class="status-list" id="status-list"></div>
+  </section>
+  <section class="card" id="errors-card">
+    <h2>端末のエラー<span class="aside" id="errors-note"></span></h2>
+    <div class="status-list" id="errors-list"></div>
+    <div class="needs-auth" id="errors-actions" hidden><button class="btn small" id="clear-errors">記録を消す</button> <span class="msg" id="errors-msg"></span></div>
   </section>
 
   <section class="card" id="settings-card">
@@ -203,6 +219,7 @@ function setAuthed(value){
   for(const el of document.querySelectorAll('.needs-auth button,.needs-auth select,.needs-auth input,select.needs-auth,#config-form input,#raw-config'))el.disabled=!value;
   updateDirty();
   renderRules();
+  renderSeasons();
 }
 async function checkAuth(){
   if(!token){setAuthed(false);return;}
@@ -213,7 +230,7 @@ $('login-form').onsubmit=async e=>{
   e.preventDefault();
   token=$('token').value.trim();
   await checkAuth();
-  if(authed){localStorage.setItem('admin_token',token);$('token').value='';}
+  if(authed){localStorage.setItem('admin_token',token);$('token').value='';refreshStatus();}
   else flash('login-msg','パスワードが違います',false);
 };
 
@@ -302,13 +319,54 @@ function sourceRow(name,part,okText){
   if(late(part))return {state:'warn',html:row('warn',name,'取得が遅れています',when,'warn')};
   return {state:'ok',html:row('ok',name,okText,when)};
 }
+/* 端末の User-Agent から、OSとブラウザを人が読める名前にする。Client Hints が取れていればそちらを優先する */
+function osName(c){
+  const ua=c.user_agent||'';
+  if(c.platform==='Windows'&&c.platform_version)return parseInt(c.platform_version)>=13?'Windows 11':'Windows 10';
+  if(c.platform==='Android'&&c.platform_version)return `Android ${c.platform_version}${c.model?`（${c.model}）`:''}`;
+  if(c.platform==='macOS'&&c.platform_version)return `macOS ${c.platform_version}`;
+  if(c.platform==='Chrome OS'||/CrOS/.test(ua))return 'ChromeOS';
+  let m;
+  if(/Windows NT 10/.test(ua))return 'Windows 10/11';
+  if(m=ua.match(/Windows NT ([\d.]+)/))return `Windows NT ${m[1]}`;
+  if(m=ua.match(/Android ([\d.]+)/))return `Android ${m[1]}`;
+  if(m=ua.match(/(?:iPhone|CPU) OS ([\d_]+)/))return `${/iPad/.test(ua)?'iPadOS':'iOS'} ${m[1].replace(/_/g,'.')}`;
+  if(m=ua.match(/Mac OS X ([\d_]+)/))return `macOS ${m[1].replace(/_/g,'.')}`;
+  if(/Tizen/.test(ua))return 'Tizen（テレビ）';
+  if(/Web0S|webOS/.test(ua))return 'webOS（テレビ）';
+  if(/Linux/.test(ua))return 'Linux';
+  return c.platform||'不明';
+}
+function browserName(c){
+  if(c.browser)return c.browser;
+  const ua=c.user_agent||'';let m;
+  for(const [re,name] of [[/Edg\/([\d.]+)/,'Edge'],[/OPR\/([\d.]+)/,'Opera'],[/Firefox\/([\d.]+)/,'Firefox'],[/Chrome\/([\d.]+)/,'Chrome'],[/Version\/([\d.]+).*Safari/,'Safari']])
+    if(m=ua.match(re))return `${name} ${m[1]}`;
+  return '不明';
+}
+function displayRow(c,i){
+  if(!c.user_agent)return row('ok',`端末${i+1}`,'情報を待っています',`${hm(c.since)} から接続（古い版の画面か、情報を送る前です）`);
+  const size=c.screen?`画面 ${c.screen[0]}×${c.screen[1]}`+(c.dpr&&c.dpr!==1?`（×${+c.dpr.toFixed(2)}）`:''):'';
+  const view=c.viewport?`表示領域 ${c.viewport[0]}×${c.viewport[1]}`:'';
+  const running=c.tab_started?`${md(c.tab_started)} ${hm(c.tab_started)} から表示中`+(c.page_loaded&&Math.abs(new Date(c.page_loaded)-new Date(c.tab_started))>60000?`（最後の読み直し ${md(c.page_loaded)} ${hm(c.page_loaded)}）`:''):'';
+  const since=[running,`${md(c.since)} ${hm(c.since)} から接続`].filter(Boolean).join('\n');
+  // 端末が実際に出している画面と版。controller が決めた画面・いまの版とずれていれば知らせる
+  const expected=modeStatus?(modeStatus.mode==='transit'&&['bus','train'].includes(modeStatus.transit_view)?`/transit/board/${modeStatus.transit_view}/`:`/${modeStatus.mode}/`):null;
+  const stale=modeStatus?.build&&c.build&&c.build!==modeStatus.build;
+  const off=expected&&c.page&&c.page!==expected;
+  const showing=c.page?`表示中 ${PAGE_LABEL[c.page]||c.page}`+(c.version?`・版 ${c.version}`:''):'';
+  const warn=[off?'予定の画面と違います（切り替えの途中か、知らせが届いていません）':'',stale?'古い版のままです（読み直しが届いていません）':''].filter(Boolean).join('\n');
+  return row(warn?'warn':'ok',`端末${i+1}`,`${osName(c)}・${browserName(c)}`,[warn,showing,[size,view].filter(Boolean).join('・'),since,c.user_agent].filter(Boolean).join('\n'),warn?'warn':'');
+}
+const PAGE_LABEL={'/transit/':'交通情報','/clock/':'時計','/transit/board/bus/':'バス「測量」','/transit/board/train/':'電車「測量」'};
 async function refreshStatus(){
   let status=null,displays=null;
   try{const r=await fetch('/transit/api/status',{cache:'no-store'});if(r.ok)status=await r.json();}catch{}
-  try{const r=await fetch('/api/displays',{cache:'no-store'});if(r.ok)displays=await r.json();}catch{}
+  try{const r=await fetch('/api/displays',{cache:'no-store',headers:authed?{Authorization:`Bearer ${token}`}:{}});if(r.ok)displays=await r.json();}catch{}
   let version=null;try{const r=await fetch('/api/version',{cache:'no-store'});if(r.ok)version=await r.json();}catch{}
   const parts=[];
-  if(displays)parts.push(displays.count?{state:'ok',html:row('ok','表示端末',`${displays.count}台が表示中`,`いちばん長い端末は ${hm(displays.connected_since[0])} から接続`)}:{state:'off',html:row('off','表示端末','表示している端末はありません','端末の電源が切れているか、ブラウザが閉じています')});
+  if(displays)parts.push(displays.count?{state:'ok',html:row('ok','表示端末',`${displays.count}台が表示中`,displays.clients?'':`いちばん長い端末は ${hm(displays.connected_since[0])} から接続。画面やOSはログインすると出ます`)}:{state:'off',html:row('off','表示端末','表示している端末はありません','端末の電源が切れているか、ブラウザが閉じています')});
+  (displays?.clients||[]).forEach((c,i)=>parts.push({state:'ok',html:displayRow(c,i)}));
   if(!status){
     parts.push({state:'bad',html:row('bad','交通情報','サーバー（transit）が応答しません','サイネージには再接続中の画面が出ます','bad')});
   }else{
@@ -334,6 +392,23 @@ async function refreshStatus(){
   $('overall-text').textContent={ok:'正常に動いています',warn:'確認が必要な項目があります',bad:'表示に問題があります'}[worst];
   $('status-checked').textContent=`${new Date().toLocaleTimeString('ja-JP')} 時点`;
 }
+
+/* 端末のエラー */
+const ERROR_KIND={error:'画面のエラー',rejection:'画面のエラー',resource:'読み込めない部品',offline:'つながらない'};
+async function refreshErrors(){
+  let items;
+  try{const r=await fetch('/api/errors',{cache:'no-store'});if(!r.ok)return;items=(await r.json()).items||[];}catch{return;}
+  $('errors-note').textContent=items.length?`${items.length}種類`:'';
+  $('errors-list').innerHTML=items.length?items.map(i=>{
+    const when=`最後 ${md(i.last)} ${hm(i.last)}`+(i.count>1?`（${i.count}回。最初 ${md(i.first)} ${hm(i.first)}）`:'');
+    const where=`画面 ${i.page||'—'}`+(i.build?`・版 ${i.build}`:'');
+    return row(i.kind==='offline'?'warn':'bad',ERROR_KIND[i.kind]||i.kind,i.message||'（内容なし）',[i.detail,i.source,when,where].filter(Boolean).join('\n'));
+  }).join(''):row('ok','記録','エラーは記録されていません');
+  $('errors-actions').hidden=!items.length;
+}
+$('clear-errors').onclick=async()=>{
+  try{await api('DELETE','/api/errors');flash('errors-msg','消しました',true);refreshErrors();}catch(e){flash('errors-msg',e.message,false);}
+};
 
 /* 設定 */
 function getPath(obj,key){return key.split('.').reduce((o,k)=>o?.[k],obj);}
@@ -386,13 +461,42 @@ $('save-raw').onclick=async()=>{
   catch(err){flash('raw-msg',err.message,false);}
 };
 
+/* 季節の装飾 */
+const SEASON_LABEL={christmas:'クリスマス',shogatsu:'正月',shinshun:'新春',valentine:'バレンタイン'};
+let seasons={override:null,periods:[],active:null};
+function seasonName(id){return SEASON_LABEL[id]||id;}
+function renderSeasons(){
+  $('season-active').textContent=seasons.active?`いま出ている装飾: ${seasonName(seasons.active)}`:'いまは出していません';
+  const ids=[...new Set(seasons.periods.map(p=>p.id))];
+  $('season-override').innerHTML='<option value="">期間どおりに出す</option><option value="off">出さない</option>'
+    +ids.map(id=>`<option value="${esc(id)}">期間に関係なく「${esc(seasonName(id))}」を出す</option>`).join('');
+  $('season-override').value=seasons.override||'';
+  $('season-periods').innerHTML=seasons.periods.map((p,i)=>`<tr><td>${esc(seasonName(p.id))}</td><td>
+    <input type="text" size="5" value="${esc(p.from)}" data-i="${i}" data-key="from" pattern="\\d\\d-\\d\\d" aria-label="始まり（月-日）"> 〜
+    <input type="text" size="5" value="${esc(p.to)}" data-i="${i}" data-key="to" pattern="\\d\\d-\\d\\d" aria-label="終わり（月-日）"></td></tr>`).join('');
+  for(const el of document.querySelectorAll('#season-card select,#season-card input'))el.disabled=!authed;
+}
+async function saveSeasons(done){
+  try{seasons=await api('PUT','/api/season',{override:seasons.override,periods:seasons.periods});flash('season-msg',done,true);}
+  catch(e){flash('season-msg',e.message,false);seasons=await (await fetch('/api/season')).json();}
+  renderSeasons();
+}
+async function loadSeasons(){seasons=await (await fetch('/api/season')).json();renderSeasons();}
+$('season-override').onchange=()=>{seasons.override=$('season-override').value||null;saveSeasons('変更しました');};
+$('season-periods').onchange=e=>{
+  const el=e.target;if(!el.dataset.key)return;
+  if(!/^\d\d-\d\d$/.test(el.value.trim())){flash('season-msg','「12-01」のように月-日で入れてください',false);renderSeasons();return;}
+  seasons.periods[+el.dataset.i][el.dataset.key]=el.value.trim();saveSeasons('期間を変更しました');
+};
+
 fetch('/api/mode').then(r=>r.json()).then(applyMode);
 connectModeStream();
+loadSeasons();
 loadSchedule();
 loadConfig();
 checkAuth();
-refreshStatus();
-setInterval(refreshStatus,15000);
+refreshStatus();refreshErrors();
+setInterval(refreshStatus,15000);setInterval(refreshErrors,15000);
 setInterval(renderTimeline,60000);
 </script>
 </body>

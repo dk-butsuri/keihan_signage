@@ -625,7 +625,7 @@
     ctx.textAlign = 'left';
     ctx.fillText('NEYAGAWA, OSAKA   ×' + SPEC.exaggerate.toFixed(1) + ' VERTICAL', 64, SPEC.H - 64);
     ctx.font = `300 11px ${H.font}`; ctx.fillStyle = rgb(hex(H.color), a * .7);
-    ctx.fillText('© OpenStreetMap contributors · 国土地理院', 64, SPEC.H - 40);
+    ctx.fillText('© OpenStreetMap contributors · 国土地理院 · 線路を走る光はイメージで、実際の列車の位置ではありません', 64, SPEC.H - 40);
   }
   /* 照準: 画面の端から2本の細線が滑ってきて学校の上で交わり、枠が締まってから波が出る。 */
   function drawLock(t) {
@@ -974,8 +974,8 @@
       if (data.station_name && name.firstChild.textContent !== data.station_name) name.firstChild.textContent = data.station_name;
       const empty = data.error ? readable(data.error, '列車の情報を取得できていません') : '表示できる列車がありません';
       const pick = list => (list || []).filter(train => !train.is_this_station).slice(0, 6).map(trainRow);
-      boardList.replaceChildren(boardColumn('京都方面', '出町柳・三条', data.error ? [] : pick(data.up_trains), empty),
-        boardColumn('大阪方面', '淀屋橋・中之島', data.error ? [] : pick(data.down_trains), empty));
+      boardList.replaceChildren(boardColumn('大阪方面', '淀屋橋・中之島', data.error ? [] : pick(data.down_trains), empty),
+        boardColumn('京都方面', '出町柳・三条', data.error ? [] : pick(data.up_trains), empty));
     }
     /* 入りきらない行は、途中で切れて見えないように丸ごと隠す。 */
     const limit = boardList.clientHeight;
@@ -1026,6 +1026,10 @@
     outro = { t0: null, geo: outroGeo(rule), done: false, resolve, promise };
     return promise;
   }
+  window.addEventListener('message', event => {
+    if (window.parent === window || event.source !== window.parent || event.origin !== location.origin || event.data?.type !== 'signage:refresh') return;
+    if (infoSelect.value === 'live') loadInfo();
+  });
   /* 端末（display.html）から、交通情報の画面へ切り替える合図が来たら後半を流し、終わったら知らせる。 */
   window.addEventListener('message', event => {
     if (window.parent === window || event.source !== window.parent || event.origin !== location.origin || event.data?.type !== 'signage:outro') return;

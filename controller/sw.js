@@ -9,7 +9,7 @@ const ATLAS_FILES = ['player.js', 'weather.js', 'map.json'];
 const PRECACHE = [
   '/',
   '/transit/',
-  ...['assembly.js', 'opening.js', 'weather.js', 'chime.js', 'chime-core.js'].map(name => '/transit/assets/' + name),
+  ...['assembly.js', 'opening.js', 'weather.js', 'chime.js', 'chime-core.js', 'seasonal.js'].map(name => '/transit/assets/' + name),
   ...['/clock/', '/transit/board/bus/', '/transit/board/train/'].flatMap(page => [page, ...ATLAS_FILES.map(name => page + name)])
 ];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];

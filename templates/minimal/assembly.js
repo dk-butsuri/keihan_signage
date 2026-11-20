@@ -45,7 +45,7 @@ export function createScreenAssembly(doc,{headerRule=true}={}) {
         doc.querySelectorAll('#clock-time > span,#clock-seconds > span').forEach((digit,index)=>lift(digit,55+index*27,380,9));
         enter(doc.getElementById('clock-date'),210,300,0,3);
         if(headerRule)rule(header,380,500);
-        const columns=['normal-up','normal-down','normal-buses','normal-delays'].map(id=>doc.getElementById(id)).filter(visible);
+        const columns=['normal-down','normal-up','normal-buses','normal-delays'].map(id=>doc.getElementById(id)).filter(visible);
         const screenRect=screen.getBoundingClientRect(),headRect=header.getBoundingClientRect(),bottom=doc.getElementById('normal').getBoundingClientRect().bottom;
         const scale=screenRect.width/parseFloat(doc.defaultView.getComputedStyle(screen).width);
         const names=columns.map(column=>column.firstElementChild.firstElementChild.textContent);

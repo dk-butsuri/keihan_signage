@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500&display=swap');
+.vl-bg { position:absolute; inset:0; background:radial-gradient(ellipse 70% 60% at 50% 115%, rgba(74, 40, 28, .38), transparent 72%); }
+.vl-box { position:absolute; display:flex; align-items:center; gap:28px; }
+.vl-svg { display:block; overflow:visible; }
+.vl-cup { fill:#B8914F; stroke:#E3C688; stroke-width:.8; }
+.vl-pleat { fill:none; stroke:#8C6A33; stroke-width:.9; opacity:.8; }
+.vl-gloss { fill:#FFFFFF; opacity:.22; }
+.vl-leaf { fill:#E3C688; }
+.vl-drizzle { fill:none; stroke:#EADCC6; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; opacity:.9; }
+.vl-thin { stroke-width:1.2; stroke:#C9A25E; }
+.vl-label { display:flex; flex-direction:column; gap:6px; color:#D9B878; line-height:1; white-space:nowrap; }
+.vl-label b { font:italic 500 34px 'Cormorant Garamond', Georgia, 'Times New Roman', serif; letter-spacing:.01em; }
+.vl-label span { font:400 12px 'Zen Kaku Gothic New', sans-serif; letter-spacing:.34em; color:rgba(217, 184, 120, .62); padding-left:2px; }
+/* カード: 地をココア色にわずかに寄せ、金の細線で縁取る。見合わせ・警報・組み上げ・時報のあいだは元に戻す */
+html[data-season="valentine"]:not([data-season-quiet]):not([data-assembly="pending"]):not([data-assembly="running"]):not([data-chime="running"]) :is(#normal-down-list, #normal-up-list, #normal-bus-list) > div:not(.empty),
+html[data-season="valentine"]:not([data-season-quiet]):not([data-assembly="pending"]):not([data-assembly="running"]):not([data-chime="running"]) #normal-delay-list > div {
+  background: #18141A !important;
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 94, .22);
+}

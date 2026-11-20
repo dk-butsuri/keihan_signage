@@ -158,3 +158,50 @@ def test_refresh_suspension_keeps_state_when_transit_is_down(monkeypatch):
         transport=httpx.MockTransport(lambda request: httpx.Response(502, json={'detail': 'x'})), **kwargs))
     assert asyncio.run(controller._refresh_suspension()) is False
     assert controller.keihan_suspended is True
+
+
+def test_status_carries_features_so_display_can_reload(tmp_path, monkeypatch):
+    config = tmp_path / 'config.yml'
+    config.write_text(yaml.safe_dump({'features': {'delays': False}}), encoding='utf-8')
+    monkeypatch.setattr(controller, 'CONFIG_FILE', config)
+    monkeypatch.setattr(controller, 'manual_override_until', None)
+    assert controller._mode_status()['features'] == {'trains': True, 'buses': True, 'delays': False, 'weather': True}
+
+
+def test_error_reports_are_merged_and_cleared(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(controller, 'ERRORS_FILE', tmp_path / 'errors.json')
+    monkeypatch.setattr(controller, 'DATA_DIR', tmp_path)
+    monkeypatch.setattr(controller, 'ADMIN_TOKEN', 'secret')
+    controller._error_times.clear()
+    report = {'kind': 'error', 'message': 'x is not defined', 'source': '/clock/player.js:1:2', 'page': '/clock/', 'count': 3}
+    with TestClient(controller.app) as client:
+        assert client.post('/api/errors', json=[report, {'kind': 'bogus'}]).status_code == 204
+        assert client.post('/api/errors', json=[report]).status_code == 204
+        items = client.get('/api/errors').json()['items']
+        assert len(items) == 1 and items[0]['count'] == 6
+        assert client.post('/api/errors', json={'kind': 'error'}).status_code == 400
+        assert client.delete('/api/errors').status_code == 401
+        assert client.delete('/api/errors', headers={'Authorization': 'Bearer secret'}).status_code == 204
+        assert client.get('/api/errors').json()['items'] == []
+    controller._error_times.clear()
+
+
+def test_displays_merge_tabs_and_show_details_only_to_admin(monkeypatch):
+    from datetime import datetime
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(controller, 'ADMIN_TOKEN', 'secret')
+    monkeypatch.setattr(controller, 'display_clients', {1: {'since': datetime(2026, 1, 1, 9), 'id': 'tab'},
+                                                        2: {'since': datetime(2026, 1, 1, 10), 'id': 'tab'},
+                                                        3: {'since': datetime(2026, 1, 1, 11), 'id': ''}})
+    monkeypatch.setattr(controller, 'display_info', {})
+    with TestClient(controller.app) as client:
+        assert client.post('/api/displays/info', json={'id': 'tab', 'screen': [1920, 1080], 'dpr': 1, 'page': '/clock/', 'tab_age_ms': 7200000, 'page_age_ms': -5},
+                           headers={'User-Agent': 'TestUA'}).status_code == 204
+        public = client.get('/api/displays').json()
+        assert public['count'] == 2 and 'clients' not in public
+        clients = client.get('/api/displays', headers={'Authorization': 'Bearer secret'}).json()['clients']
+        assert clients[0]['connections'] == 2 and clients[0]['user_agent'] == 'TestUA' and clients[0]['page'] == '/clock/'
+        assert 'user_agent' not in clients[1]
+        started = datetime.fromisoformat(clients[0]['tab_started'])
+        assert 7190 < (datetime.now() - started).total_seconds() < 7210 and clients[0]['page_loaded'] is None

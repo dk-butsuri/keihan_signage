@@ -29,7 +29,7 @@
 <header><nav aria-label="デモの選択"><a id="intro-back" href="/demo">← デモ一覧</a><label class="choice">デモ<select id="intro-demo" aria-label="デモ選択">{% for item in demos %}<option value="{{ item.id }}" {% if item.id == demo.id %}selected{% endif %} {% if not item.available %}disabled{% endif %}>{{ item.title }}</option>{% endfor %}</select></label></nav><h1>{{ demo.title }}</h1></header>
 
 <div id="atlas-intro">
-  <div class="intro-stage" role="img" aria-label="起動イントロ「測量」。黒い画面を2本の細線が滑ってきて同志社香里の上で交わり、照準が締まる。そこから広がる波に沿って、測点が灯り、等高線・道路・建物が線だけの立体で立ち上がり、視点は真上から引きながら斜めに寝ていく。京阪本線が光り、準急が香里園に止まると、真上からの視点に回り込みながら駅に寄り、線路が見出しの下線になり発車案内が組み上がります。"><canvas class="intro-map" width="1920" height="1080" aria-hidden="true"></canvas><div class="intro-title" aria-hidden="true"><div class="intro-group">探究1A-2班</div><div class="intro-line1"></div><div class="intro-line2"></div></div></div>
+  <div class="intro-stage" role="img" aria-label="起動イントロ「測量」。黒い画面を2本の細線が滑ってきて同志社香里の上で交わり、照準が締まる。そこから広がる波に沿って、測点が灯り、等高線・道路・建物が線だけの立体で立ち上がり、視点は真上から引きながら斜めに寝ていく。京阪本線が光り、準急が香里園に止まると、真上からの視点に回り込みながら駅に寄り、線路が見出しの下線になり発車案内が組み上がります。"><canvas class="intro-map" width="1920" height="1080" aria-hidden="true"></canvas><div class="intro-title" aria-hidden="true"><div class="intro-group">探究1A-1班</div><div class="intro-line1"></div><div class="intro-line2"></div></div></div>
   <div class="intro-controls">
     <button type="button" data-action="play" disabled>最初から再生</button>
     <button type="button" data-action="restart" disabled>やり直す</button>

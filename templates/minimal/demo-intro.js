@@ -167,7 +167,7 @@
     doc.querySelectorAll('#clock-time > span,#clock-seconds > span')
       .forEach((digit, index) => lift(digit, SPEC.clock.start + index * SPEC.clock.digitStagger));
     motion(doc.getElementById('clock-date'), [{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }], SPEC.clock.start + .2, .3);
-    ['normal-up', 'normal-down', 'normal-buses', 'normal-delays'].map(id => doc.getElementById(id)).forEach((column, index) => {
+    ['normal-down', 'normal-up', 'normal-buses', 'normal-delays'].map(id => doc.getElementById(id)).forEach((column, index) => {
       const begin = A.start + index * A.columnGap, heading = column.firstElementChild;
       motion(heading, [{ clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0 0 0)' }], begin, .5, 'cubic-bezier(.65,0,.25,1)');
       [...heading.children].forEach(child => sweep(child, begin, .38));
@@ -421,7 +421,7 @@
     Promise.all([
       document.fonts.load('300 66px "Zen Kaku Gothic New"', SPEC.title.lines[1]),
       document.fonts.load('400 36px "Zen Kaku Gothic New"', SPEC.title.lines[0] + S.labels.join('')),
-      document.fonts.load('500 20px "Zen Kaku Gothic New"', '探究1A-2班')
+      document.fonts.load('500 20px "Zen Kaku Gothic New"', '探究1A-1班')
     ]),
     new Promise(resolve => setTimeout(resolve, 4000))
   ]).then(() => document.fonts.ready);

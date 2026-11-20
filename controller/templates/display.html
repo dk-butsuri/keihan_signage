@@ -125,6 +125,20 @@ window.addEventListener('message',event=>{
         releaseHandoff();
     }
 });
+// 季節の装飾は controller が決める。画面（iframe）は読み込まれるたびに聞いてくるので答え、変わったら出ている画面に知らせる
+var currentSeason = null;
+function sendSeason(target) {
+    target?.postMessage({type:'signage:season',season:currentSeason},location.origin);
+}
+function setSeason(season) {
+    season=season||null;
+    if(season===currentSeason)return;
+    currentSeason=season;
+    for(const frame of document.querySelectorAll('iframe'))sendSeason(frame.contentWindow);
+}
+window.addEventListener('message',event=>{
+    if(event.origin===location.origin && event.data?.type==='signage:season-request')sendSeason(event.source);
+});
 function setMode(mode, view) {
     if (!['transit','clock'].includes(mode)) return;
     const path=screenPath(mode, view);
@@ -132,6 +146,7 @@ function setMode(mode, view) {
     const from=currentPath;
     cancelHandoff();
     currentMode=mode;currentPath=path;
+    if(typeof sendDisplayInfo==='function')setTimeout(sendDisplayInfo,0);
     if(handoffAllowed(from, path))startHandoff(path);else $('f').src=path;
     lastOk=Date.now();firstFailure=null;failures=0;attempts=[];
     $('reconnecting-screen').hidden=true;
@@ -198,9 +213,10 @@ async function healthCheck() {
         if(mode!==currentMode)return;
         if(response.status<500) {
             const reconnecting=!$('reconnecting-screen').hidden;
+            const outageStart=firstFailure;
             lastOk=Date.now();firstFailure=null;failures=0;attempts=[];
             $('reconnecting-screen').hidden=true;
-            if(reconnecting){cancelHandoff();$('f').src=currentPath;}
+            if(reconnecting){reportOutage(outageStart);cancelHandoff();$('f').src=currentPath;}
         } else {
             let detail=response.statusText;
             try {const data=await response.json();if(typeof data.detail==='string')detail=data.detail;} catch(error) {if(controller.signal.aborted)throw error;}
@@ -210,23 +226,112 @@ async function healthCheck() {
         if(mode===currentMode)recordFailure('—',controller.signal.aborted?'応答なし（10秒でタイムアウト）':'接続できません');
     } finally {clearTimeout(timer);checkInFlight=false;updateDisplay();}
 }
+// 端末と中の画面で起きたエラーを、同じものは回数にまとめて controller に送る（管理画面の「端末のエラー」）。
+// つながらない間は手元に溜めておき、戻ってから送る
+const errorQueue=new Map(), ERROR_QUEUE_MAX=50;
+function queueError(item){
+    const key=[item.kind,item.message,item.source,item.page].join('\n'),queued=errorQueue.get(key);
+    if(queued)queued.count+=item.count;else if(errorQueue.size<ERROR_QUEUE_MAX)errorQueue.set(key,item);
+}
+function reportError(kind,message,source,page,detail){
+    queueError({kind,message:String(message||'').slice(0,300),source:String(source||'').slice(0,200),page:String(page||'').slice(0,100),
+        detail:detail||'',count:1,build:currentVersion});
+}
+async function flushErrors(){
+    if(!errorQueue.size)return;
+    const items=[...errorQueue.values()];errorQueue.clear();
+    try{
+        const response=await fetch('/api/errors',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(items),cache:'no-store'});
+        if(response.status>=500)throw new Error('HTTP '+response.status);
+    }catch(error){items.forEach(queueError);}
+}
+function reportOutage(start){
+    if(!start)return;
+    const minutes=Math.max(1,Math.round((Date.now()-start)/60000));
+    const at=new Date(start).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+    reportError('offline','再接続中の画面になった',$('failure-cause').textContent,currentPath,`${at}から約${minutes}分`);
+    setTimeout(flushErrors,1000);
+}
+window.addEventListener('error',event=>{
+    const target=event.target;
+    if(target&&target!==window&&(target.src||target.href))reportError('resource',target.tagName.toLowerCase()+' を読み込めません',target.src||target.href,'/');
+    else reportError('error',event.message,event.filename?event.filename.replace(location.origin,'')+':'+event.lineno+':'+event.colno:'','/');
+},true);
+window.addEventListener('unhandledrejection',event=>{
+    const reason=event.reason;
+    reportError('rejection',reason instanceof Error?reason.message:reason,reason instanceof Error?String(reason.stack||'').split('\n')[1]?.trim():'','/');
+});
+window.addEventListener('message',event=>{
+    if(event.origin!==location.origin||event.data?.type!=='signage:error')return;
+    if(![...document.querySelectorAll('iframe')].some(frame=>frame.contentWindow===event.source))return;
+    const data=event.data;
+    if(['error','rejection','resource'].includes(data.kind))reportError(data.kind,data.message,data.source,data.page);
+});
+setInterval(flushErrors,15000);
 // 新しい版を反映したら（build が変わったら）、端末の画面をまるごと読み直す
 var loadedBuild = null;
 function checkBuild(data) {
     if (!data.build) return;
-    if (loadedBuild === null) { loadedBuild = data.build; return; }
+    if (loadedBuild === null) { loadedBuild = data.build; setTimeout(sendDisplayInfo,0); return; }
     if (data.build !== loadedBuild) location.reload();
 }
-fetch('/api/mode').then(r=>r.json()).then(data=>{checkBuild(data);setMode(data.mode,data.transit_view);}).catch(()=>{});
+// 交通情報の画面は読み込んだときの設定で欄を組むので、表示する情報が変わったら読み直す。
+// 「測量」の画面は欄を毎回 API から決めるので、取り直させるだけでよい（読み直すと地図の準備からやり直しになる）
+var currentFeatures = null;
+function setFeatures(features) {
+    if (!features) return;
+    const key=JSON.stringify(features), changed=currentFeatures!==null && key!==currentFeatures;
+    currentFeatures=key;
+    if (!changed || handoff || !$('reconnecting-screen').hidden) return;
+    if (currentPath==='/transit/') $('f').src=currentPath;
+    else $('f').contentWindow?.postMessage({type:'signage:refresh'},location.origin);
+}
+var currentVersion = '';
+function applyStatus(data) {
+    currentVersion=data.version||currentVersion;
+    checkBuild(data);setSeason(data.season);
+    const path=currentPath;
+    setMode(data.mode,data.transit_view);
+    // 画面ごと切り替わったときは、新しい画面がいまの設定で読み込まれる
+    if (currentPath!==path && data.features) currentFeatures=JSON.stringify(data.features);
+    else setFeatures(data.features);
+}
+fetch('/api/mode').then(r=>r.json()).then(applyStatus).catch(()=>{});
 // 途中の Cloudflare がエラーを返すと、ブラウザは EventSource をつなぎ直さなくなる。
 // 黙って途切れた接続にも気づけるよう、サーバーは25秒ごとに ping を送り、90秒届かなければつなぎ直す
 const EVENTS_SILENCE_MS=90000;
 var events=null,lastEventAt=0;
+// 管理画面に端末ごとの画面・OSを出すための名乗り。読み直しても同じタブなら同じ id になる
+const displayId=(()=>{
+    const fresh=()=>(crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2));
+    try{let id=sessionStorage.getItem('signage-display-id');if(!id){id=fresh();sessionStorage.setItem('signage-display-id',id);}return id;}
+    catch(error){return fresh();}
+})();
+// 端末の時計はずれていることがあるので、時刻ではなく「何ミリ秒前か」を送り、controller の時計で時刻に直す
+const pageLoadedAt=Date.now(), tabStartedAt=(()=>{
+    try{const saved=Number(sessionStorage.getItem('signage-tab-started'));if(saved>0&&saved<=pageLoadedAt)return saved;sessionStorage.setItem('signage-tab-started',String(pageLoadedAt));}catch(error){}
+    return pageLoadedAt;
+})();
+async function sendDisplayInfo(){
+    const info={id:displayId,tab_age_ms:Date.now()-tabStartedAt,page_age_ms:Date.now()-pageLoadedAt,page:currentPath,build:loadedBuild||'',version:currentVersion,screen:[screen.width,screen.height],viewport:[innerWidth,innerHeight],dpr:devicePixelRatio,language:navigator.language};
+    try{
+        const hints=await navigator.userAgentData?.getHighEntropyValues(['platformVersion','model','fullVersionList']);
+        if(hints){
+            const brand=(hints.fullVersionList||[]).find(b=>!/Not.?A.?Brand|Chromium/i.test(b.brand))||(hints.fullVersionList||[])[0];
+            Object.assign(info,{platform:hints.platform,platform_version:hints.platformVersion,model:hints.model,browser:brand?brand.brand+' '+brand.version:''});
+        }
+    }catch(error){}
+    fetch('/api/displays/info',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(info),cache:'no-store'}).catch(()=>{});
+}
+let infoTimer=null;
+window.addEventListener('resize',()=>{clearTimeout(infoTimer);infoTimer=setTimeout(sendDisplayInfo,2000);});
 function connectEvents() {
     if(events)events.close();
     lastEventAt=Date.now();
-    events=new EventSource('/api/mode/stream?client=display');
-    events.onmessage=event=>{lastEventAt=Date.now();try{const data=JSON.parse(event.data);checkBuild(data);setMode(data.mode,data.transit_view);}catch(error){}};
+    events=new EventSource('/api/mode/stream?client=display&id='+encodeURIComponent(displayId));
+    // controller を作り直すと手元の情報が消えるので、つなぎ直すたびに送り直す
+    events.onopen=sendDisplayInfo;
+    events.onmessage=event=>{lastEventAt=Date.now();try{applyStatus(JSON.parse(event.data));}catch(error){}};
     events.addEventListener('ping',()=>{lastEventAt=Date.now();});
 }
 connectEvents();

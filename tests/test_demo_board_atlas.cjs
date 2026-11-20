@@ -37,10 +37,10 @@ const assert=require('assert/strict');
         const train=(extra)=>({kind:'準急',time:'15:06',destination:'出町柳',delay:0,status:'',minutes_remaining:21,is_this_station:false,sub_station_name:'寝屋川市',sub_station_time:'15:03',sub_station_verb:'着',...extra});
         view=await show({station_name:'香里園',error:null,up_trains:[train({}),train({kind:'特急',delay:18,estimate_unreliable:true,minutes_remaining:null,position:'寝屋川市 → 香里園 の間',stopped_minutes:14})],
             down_trains:[train({destination:'淀屋橋',minutes_remaining:0})]});
-        assert.deepEqual(view.heads,['京都方面出町柳・三条','大阪方面淀屋橋・中之島']);
-        assert.equal(view.rows[0],'準急15:06出町柳行寝屋川市 15:03着あと21分');
-        assert.equal(view.rows[1],'特急15:06出町柳行14分停止·寝屋川市 → 香里園 の間18分遅れ','予測が立たないときは遅れを右に');
-        assert.match(view.rows[2],/淀屋橋行.*まもなく$/);
+        assert.deepEqual(view.heads,['大阪方面淀屋橋・中之島','京都方面出町柳・三条']);
+        assert.match(view.rows[0],/淀屋橋行.*まもなく$/);
+        assert.equal(view.rows[1],'準急15:06出町柳行寝屋川市 15:03着あと21分');
+        assert.equal(view.rows[2],'特急15:06出町柳行14分停止·寝屋川市 → 香里園 の間18分遅れ','予測が立たないときは遅れを右に');
         assert.doesNotMatch(view.rows.join(),/null|undefined/);
         assert.equal((await show({station_name:'',up_trains:[],down_trains:[],error:'18'})).empty,'列車の情報を取得できていません','読めないエラーは言い換える');
         await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);

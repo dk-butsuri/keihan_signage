@@ -1,5 +1,8 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>京阪サイネージ</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400&amp;family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap"><script>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>京阪サイネージ</title><script>/* 端末（display.html）の中で開いているときは、この画面のエラーを端末に渡す。端末がまとめて controller に送る */
+if(window.parent!==window)(()=>{const send=(kind,message,source)=>{try{parent.postMessage({type:'signage:error',kind,message:String(message||''),source:source||'',page:location.pathname},location.origin);}catch(e){}};
+addEventListener('error',e=>{const t=e.target;if(t&&t!==window&&(t.src||t.href))send('resource',t.tagName.toLowerCase()+' を読み込めません',t.src||t.href);else send('error',e.message,e.filename?e.filename.replace(location.origin,'')+':'+e.lineno+':'+e.colno:'');},true);
+addEventListener('unhandledrejection',e=>{const r=e.reason;send('rejection',r instanceof Error?r.message:r,r instanceof Error?String(r.stack||'').split('\n')[1]?.trim():'');});})();</script><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400&amp;family=Zen+Kaku+Gothic+New:wght@300;400;500;700&amp;display=swap"><script>
 const config = {{ config | tojson }};
 const openingAssembly={settled:new Set(),failed:new Set(),timer:null};
 const openingAllowed=!config.demo&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&new URLSearchParams(location.search).get('motion')!=='off';
@@ -222,19 +225,6 @@ span.operation-compact-lines { color:#7C7C82; }
 
 <section style="width: 1064px; flex-shrink: 0; display: flex; gap: 28px" id="normal-trains">
 
-<div style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="normal-up">
-<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid rgb(38, 38, 42); flex-shrink: 0;">
-<span style="font-size: 24px; font-weight: 500">京都方面</span>
-<span style="font-size: 15px; color: #7C7C82">出町柳・三条</span>
-</div>
-
-
-
-
-
-
-<div id="normal-up-list"></div></div>
-
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="normal-down">
 <div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid rgb(38, 38, 42); flex-shrink: 0;">
 <span style="font-size: 24px; font-weight: 500">大阪方面</span>
@@ -247,6 +237,19 @@ span.operation-compact-lines { color:#7C7C82; }
 
 
 <div id="normal-down-list"></div></div>
+
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="normal-up">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid rgb(38, 38, 42); flex-shrink: 0;">
+<span style="font-size: 24px; font-weight: 500">京都方面</span>
+<span style="font-size: 15px; color: #7C7C82">出町柳・三条</span>
+</div>
+
+
+
+
+
+
+<div id="normal-up-list"></div></div>
 </section>
 
 <section style="width: 316px; flex-shrink: 0; display: flex; flex-direction: column" id="normal-buses">
@@ -281,16 +284,16 @@ span.operation-compact-lines { color:#7C7C82; }
 <div style="margin-top: 22px" id="line-map"></div>
 
 <div style="flex: 1; min-height: 0; display: flex; gap: 36px; margin-top: 18px; padding-top: 0" id="suspended-columns">
-<section style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="suspended-up">
-<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A"><span style="font-size: 24px; font-weight: 500">京都方面</span><span style="font-size: 15px; color: #7C7C82">出町柳・三条</span></div>
-<div style="padding-top: 20px"><div style="font-size: 40px; font-weight: 500; color: #FF5B2E; line-height: 1" data-field="state">止まっています</div>
+<section style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="suspended-down">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A"><span style="font-size: 24px; font-weight: 500">大阪方面</span><span style="font-size: 15px; color: #7C7C82">淀屋橋・中之島</span></div>
+<div style="padding-top: 20px"><div style="font-size: 40px; font-weight: 500; color: #F1F1EE; line-height: 1" data-field="state">遅れて動いています</div>
 </div>
 
 
 <div class="next-list" style="margin-top: auto;"><div style="margin-top: 0px; font-size: 17px; color: rgb(161, 161, 166); line-height: 1; padding-bottom: 2px;" data-field="next-label"></div></div></section>
-<section style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="suspended-down">
-<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A"><span style="font-size: 24px; font-weight: 500">大阪方面</span><span style="font-size: 15px; color: #7C7C82">淀屋橋・中之島</span></div>
-<div style="padding-top: 20px"><div style="font-size: 40px; font-weight: 500; color: #F1F1EE; line-height: 1" data-field="state">遅れて動いています</div>
+<section style="flex: 1; min-width: 0; display: flex; flex-direction: column" id="suspended-up">
+<div style="height: 44px; display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid #26262A"><span style="font-size: 24px; font-weight: 500">京都方面</span><span style="font-size: 15px; color: #7C7C82">出町柳・三条</span></div>
+<div style="padding-top: 20px"><div style="font-size: 40px; font-weight: 500; color: #FF5B2E; line-height: 1" data-field="state">止まっています</div>
 </div>
 
 
@@ -1049,4 +1052,5 @@ if(!config.demo&&new URLSearchParams(location.search).get('motion')!=='off') {
     });}).catch(()=>{});
 }
 </script>
+<script src="assets/seasonal.js"></script>
 </body></html>
